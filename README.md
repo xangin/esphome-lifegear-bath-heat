@@ -4,6 +4,8 @@
 
 這是一個 ESPHome [external component](https://esphome.io/components/external_components.html)，所有實體都由元件原生提供，設定檔裡不需要寫任何 lambda。協定由逆向工程取得，在 **BD-125W2** 實機運作。
 
+另附一套 [Guition 4 吋觸控面板韌體](panel/README.md)，可以直接做出有螢幕的新面板。
+
 <p align="center">
   <img src="images/product.jpg" alt="樂奇浴室暖風機與原廠面板" width="300">
 </p>
@@ -73,7 +75,7 @@ C3 的 GPIO18／19 是 USB，腳位請改用其他 GPIO，例如 `machine_tx_pin
 
 ### 使用 Guition ESP32-S3-4848S040 觸控面板
 
-如果想要一片有螢幕的面板取代原廠面板，Guition 4 吋 480×480 開發板背面的 relay 排針就能直接接暖風機：
+如果想要一片有螢幕的面板取代原廠面板，本 repo 的 [`panel/`](panel/README.md) 提供完整的觸控面板韌體（畫面、操作說明與安裝方式都在該頁）。Guition 4 吋 480×480 開發板背面的 relay 排針就能直接接暖風機：
 
 <p align="center">
   <img src="images/guition-4848s040-header.png" alt="Guition ESP32-S3-4848S040 relay 排針定義" width="360">
@@ -85,7 +87,7 @@ C3 的 GPIO18／19 是 USB，腳位請改用其他 GPIO，例如 `machine_tx_pin
 | relay3 | GPIO1 | RX | `rmt_rx_pin: 1` |
 | GND | — | GND | — |
 
-本 repo 只提供暖風機元件；觸控面板的 LVGL 介面不在範圍內。
+面板韌體與使用說明請見 [`panel/README.md`](panel/README.md)。
 
 ## 安裝
 

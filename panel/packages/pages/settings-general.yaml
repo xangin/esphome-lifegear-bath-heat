@@ -1,0 +1,338 @@
+# 設定分頁：六列、間距 54。英數 label 依規則比中文低 2。
+obj:
+  id: settings_general_content
+  x: 8
+  y: 80
+  width: 464
+  height: 334
+  radius: 12
+  bg_color: 0x20242C
+  bg_grad_color: 0x050607
+  bg_grad_dir: VER
+  bg_opa: COVER
+  border_color: 0x5A5A5A
+  border_width: 1
+  pad_all: 0
+  hidden: true
+  scrollable: false
+  widgets:
+    - label:
+        x: 16
+        y: 17
+        width: 156
+        height: 30
+        text: "螢幕亮度"
+        text_font: settings_zh_20
+    - slider:
+        id: settings_brightness_slider
+        x: 174
+        y: 18
+        width: 204
+        height: 24
+        min_value: 10
+        max_value: 100
+        value: 70
+        bg_color: 0x303030
+        bg_opa: COVER
+        radius: 12
+        indicator:
+          bg_color: 0xFFFFFF
+          bg_opa: COVER
+          radius: 12
+        knob:
+          bg_color: 0xFFFFFF
+          bg_opa: COVER
+          border_color: 0x707070
+          border_width: 2
+        on_value:
+          - lambda: |-
+              if (!id(settings_loading)) {
+                id(settings_brightness_draft) = (int) lroundf(x);
+                id(settings_dirty) = true;
+                auto call = id(display_backlight).turn_on();
+                call.set_brightness(id(settings_brightness_draft) / 100.0f);
+                call.set_transition_length(0);
+                call.perform();
+                id(refresh_settings_ui).execute();
+              }
+    - label:
+        id: settings_brightness_value
+        x: 386
+        y: 19
+        width: 66
+        height: 30
+        text: "70%"
+        text_font: settings_en_20
+        text_align: RIGHT
+    - obj:
+        x: 14
+        y: 58
+        width: 436
+        height: 1
+        bg_color: 0x4A4A4A
+        bg_opa: COVER
+    - label:
+        x: 16
+        y: 71
+        width: 170
+        height: 30
+        text: "螢幕睡眠"
+        text_font: settings_zh_20
+    - button:
+        x: 188
+        y: 62
+        width: 48
+        height: 44
+        radius: 8
+        bg_color: 0x222222
+        border_width: 1
+        on_click:
+          - script.execute:
+              id: adjust_option_draft
+              option_index: 0
+              delta: -1
+        widgets:
+          - label:
+              align: CENTER
+              text: "\U000F0731"
+              text_font: settings_mdi_34
+    - label:
+        id: settings_sleep_value
+        x: 246
+        y: 75
+        width: 62
+        height: 29
+        text: "--"
+        text_font: settings_en_20
+        text_align: RIGHT
+    - label:
+        id: settings_sleep_unit
+        x: 314
+        y: 73
+        width: 76
+        height: 29
+        text: "分鐘"
+        text_font: settings_zh_20
+        text_align: LEFT
+    - button:
+        x: 394
+        y: 62
+        width: 48
+        height: 44
+        radius: 8
+        bg_color: 0x222222
+        border_width: 1
+        on_click:
+          - script.execute:
+              id: adjust_option_draft
+              option_index: 0
+              delta: 1
+        widgets:
+          - label:
+              align: CENTER
+              text: "\U000F0734"
+              text_font: settings_mdi_34
+    - obj:
+        x: 14
+        y: 112
+        width: 436
+        height: 1
+        bg_color: 0x4A4A4A
+        bg_opa: COVER
+    - label:
+        x: 16
+        y: 125
+        width: 240
+        height: 30
+        text: "首次觸控僅喚醒"
+        text_font: settings_zh_20
+    - button:
+        id: settings_wake_touch_button
+        x: 330
+        y: 117
+        width: 112
+        height: 44
+        radius: 22
+        bg_color: 0x383838
+        border_width: 1
+        on_click:
+          - lambda: |-
+              id(settings_wake_touch_draft) = !id(settings_wake_touch_draft);
+              id(settings_dirty) = true;
+          - script.execute: refresh_settings_ui
+        widgets:
+          - label:
+              id: settings_wake_touch_value
+              align: CENTER
+              text: "開啟"
+              text_font: settings_zh_20
+    - obj:
+        x: 14
+        y: 166
+        width: 436
+        height: 1
+        bg_color: 0x4A4A4A
+        bg_opa: COVER
+    - label:
+        x: 16
+        y: 179
+        width: 170
+        height: 30
+        text: "自動回首頁"
+        text_font: settings_zh_20
+    - button:
+        x: 188
+        y: 170
+        width: 48
+        height: 44
+        radius: 8
+        bg_color: 0x222222
+        border_width: 1
+        on_click:
+          - script.execute:
+              id: adjust_option_draft
+              option_index: 1
+              delta: -1
+        widgets:
+          - label:
+              align: CENTER
+              text: "\U000F0731"
+              text_font: settings_mdi_34
+    - label:
+        id: settings_auto_home_value
+        x: 246
+        y: 183
+        width: 62
+        height: 29
+        text: "--"
+        text_font: settings_en_20
+        text_align: RIGHT
+    - label:
+        id: settings_auto_home_unit
+        x: 314
+        y: 181
+        width: 76
+        height: 29
+        text: "分鐘"
+        text_font: settings_zh_20
+        text_align: LEFT
+    - button:
+        x: 394
+        y: 170
+        width: 48
+        height: 44
+        radius: 8
+        bg_color: 0x222222
+        border_width: 1
+        on_click:
+          - script.execute:
+              id: adjust_option_draft
+              option_index: 1
+              delta: 1
+        widgets:
+          - label:
+              align: CENTER
+              text: "\U000F0734"
+              text_font: settings_mdi_34
+    - obj:
+        x: 14
+        y: 220
+        width: 436
+        height: 1
+        bg_color: 0x4A4A4A
+        bg_opa: COVER
+    - label:
+        x: 16
+        y: 233
+        width: 170
+        height: 30
+        text: "溫控溫度"
+        text_font: settings_zh_20
+    - button:
+        x: 188
+        y: 224
+        width: 48
+        height: 44
+        radius: 8
+        bg_color: 0x222222
+        border_width: 1
+        on_click:
+          - script.execute:
+              id: adjust_option_draft
+              option_index: 2
+              delta: -1
+        widgets:
+          - label:
+              align: CENTER
+              text: "\U000F0731"
+              text_font: settings_mdi_34
+    - label:
+        id: settings_heat_temp_value
+        x: 246
+        y: 237
+        width: 62
+        height: 29
+        text: "--"
+        text_font: settings_en_20
+        text_align: RIGHT
+    - label:
+        id: settings_heat_temp_unit
+        x: 314
+        y: 237
+        width: 76
+        height: 29
+        text: "°C"
+        text_font: settings_en_20
+        text_align: LEFT
+    - button:
+        x: 394
+        y: 224
+        width: 48
+        height: 44
+        radius: 8
+        bg_color: 0x222222
+        border_width: 1
+        on_click:
+          - script.execute:
+              id: adjust_option_draft
+              option_index: 2
+              delta: 1
+        widgets:
+          - label:
+              align: CENTER
+              text: "\U000F0734"
+              text_font: settings_mdi_34
+    - obj:
+        x: 14
+        y: 274
+        width: 436
+        height: 1
+        bg_color: 0x4A4A4A
+        bg_opa: COVER
+    - label:
+        x: 16
+        y: 289
+        width: 240
+        height: 30
+        text: "主機蜂鳴音"
+        text_font: settings_zh_20
+    - button:
+        id: settings_buzzer_button
+        x: 330
+        y: 281
+        width: 112
+        height: 44
+        radius: 22
+        bg_color: 0x383838
+        border_width: 1
+        on_click:
+          - lambda: |-
+              id(settings_buzzer_draft) = !id(settings_buzzer_draft);
+              id(settings_dirty) = true;
+          - script.execute: refresh_settings_ui
+        widgets:
+          - label:
+              id: settings_buzzer_value
+              align: CENTER
+              text: "開啟"
+              text_font: settings_zh_20

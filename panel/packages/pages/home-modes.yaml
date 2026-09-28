@@ -1,0 +1,627 @@
+obj:
+  id: home_modes_layer
+  x: 0
+  y: 0
+  width: 480
+  height: 480
+  bg_opa: TRANSP
+  border_width: 0
+  pad_all: 0
+  clickable: false
+  scrollable: false
+  widgets:
+    # ---------------------------------------------------------------------
+    # 四張模式卡完全以 LVGL 繪製。關機時為深灰立體卡面，只有運轉中的
+    # 卡片套用原本的模式色；左右選擇塊仍保留各模式最後一次選項。
+    # ---------------------------------------------------------------------
+    - button:
+        id: dry_mode_button
+        x: 8
+        y: 88
+        width: 228
+        height: 184
+        radius: 12
+        bg_color: 0x343434
+        bg_grad_color: 0x141414
+        bg_grad_dir: VER
+        bg_opa: COVER
+        border_width: 0
+        outline_width: 0
+        shadow_opa: TRANSP
+        pad_all: 0
+        scrollable: false
+        clickable: true
+        on_click:
+          - lambda: |-
+              int next = id(last_dry_mode);
+              if (id(active_normal_mode) == 6 || id(active_normal_mode) == 7)
+                next = (id(active_normal_mode) == 6) ? 7 : 6;
+              id(last_dry_mode) = next;
+              id(last_normal_mode) = next;
+              id(active_normal_mode) = next;
+              id(bath_heat)->cmd_mode(next == 6 ? "dry_eco" : "dry_fast");
+              id(refresh_panel_ui).execute();
+        widgets:
+          - obj:
+              x: 20
+              y: 16
+              width: 188
+              height: 42
+              radius: 21
+              bg_color: 0x0C0C0C
+              bg_opa: COVER
+              border_color: 0x5A5A5A
+              border_width: 1
+              pad_all: 0
+              clickable: false
+              scrollable: false
+              widgets:
+                - obj:
+                    id: dry_mode_switch_thumb
+                    x: 2
+                    y: 2
+                    width: 92
+                    height: 38
+                    radius: 19
+                    bg_color: 0x5A5A5A
+                    bg_grad_color: 0x303030
+                    bg_grad_dir: VER
+                    bg_opa: COVER
+                    border_color: 0x777777
+                    border_width: 1
+                    clickable: false
+                - label:
+                    id: dry_eco_label
+                    x: 4
+                    y: 8
+                    width: 88
+                    height: 28
+                    text: "節電"
+                    text_font: panel_font_22
+                    text_align: CENTER
+                    clickable: false
+                - label:
+                    id: dry_fast_label
+                    x: 98
+                    y: 8
+                    width: 86
+                    height: 28
+                    text: "快速"
+                    text_font: panel_font_22
+                    text_align: CENTER
+                    clickable: false
+          - label:
+              id: dry_mode_icon
+              x: 84
+              y: 69
+              width: 60
+              height: 54
+              text: "\U000F0599"
+              text_font: panel_mdi_54
+              text_color: 0x777777
+              text_align: CENTER
+              clickable: false
+          - label:
+              id: dry_mode_title
+              x: 66
+              y: 130
+              width: 96
+              height: 42
+              text: "乾燥"
+              text_font: panel_font_30
+              text_align: CENTER
+              clickable: false
+          - obj:
+              x: 18
+              y: 14
+              width: 96
+              height: 48
+              bg_opa: TRANSP
+              border_width: 0
+              clickable: true
+              scrollable: false
+              on_click:
+                - lambda: |-
+                    id(last_dry_mode) = 6;
+                    id(last_normal_mode) = 6;
+                    id(active_normal_mode) = 6;
+                    id(bath_heat)->cmd_mode("dry_eco");
+                    id(refresh_panel_ui).execute();
+          - obj:
+              x: 114
+              y: 14
+              width: 96
+              height: 48
+              bg_opa: TRANSP
+              border_width: 0
+              clickable: true
+              scrollable: false
+              on_click:
+                - lambda: |-
+                    id(last_dry_mode) = 7;
+                    id(last_normal_mode) = 7;
+                    id(active_normal_mode) = 7;
+                    id(bath_heat)->cmd_mode("dry_fast");
+                    id(refresh_panel_ui).execute();
+
+    - button:
+        id: heat_mode_button
+        x: 244
+        y: 88
+        width: 228
+        height: 184
+        radius: 12
+        bg_color: 0x343434
+        bg_grad_color: 0x141414
+        bg_grad_dir: VER
+        bg_opa: COVER
+        border_width: 0
+        outline_width: 0
+        shadow_opa: TRANSP
+        pad_all: 0
+        scrollable: false
+        clickable: true
+        on_click:
+          - lambda: |-
+              int next = id(last_heat_mode);
+              if (id(active_normal_mode) == 0 || id(active_normal_mode) == 1)
+                next = (id(active_normal_mode) == 0) ? 1 : 0;
+              id(last_heat_mode) = next;
+              id(last_normal_mode) = next;
+              id(active_normal_mode) = next;
+              id(bath_heat)->cmd_mode(next == 0 ? "heat_bath" : "heat_temp");
+              id(refresh_panel_ui).execute();
+        widgets:
+          - obj:
+              x: 20
+              y: 16
+              width: 188
+              height: 42
+              radius: 21
+              bg_color: 0x0C0C0C
+              bg_opa: COVER
+              border_color: 0x5A5A5A
+              border_width: 1
+              pad_all: 0
+              clickable: false
+              scrollable: false
+              widgets:
+                - obj:
+                    id: heat_mode_switch_thumb
+                    x: 2
+                    y: 2
+                    width: 92
+                    height: 38
+                    radius: 19
+                    bg_color: 0x5A5A5A
+                    bg_grad_color: 0x303030
+                    bg_grad_dir: VER
+                    bg_opa: COVER
+                    border_color: 0x777777
+                    border_width: 1
+                    clickable: false
+                - label:
+                    id: heat_bath_label
+                    x: 4
+                    y: 8
+                    width: 88
+                    height: 28
+                    text: "沐浴"
+                    text_font: panel_font_22
+                    text_align: CENTER
+                    clickable: false
+                - label:
+                    id: heat_temp_label
+                    x: 98
+                    y: 8
+                    width: 86
+                    height: 28
+                    text: "溫控"
+                    text_font: panel_font_22
+                    text_align: CENTER
+                    clickable: false
+          - label:
+              id: heat_mode_icon
+              x: 84
+              y: 69
+              width: 60
+              height: 54
+              text: "\U000F0238"
+              text_font: panel_mdi_54
+              text_color: 0x777777
+              text_align: CENTER
+              clickable: false
+          - label:
+              id: heat_mode_title
+              x: 66
+              y: 130
+              width: 96
+              height: 42
+              text: "暖房"
+              text_font: panel_font_30
+              text_align: CENTER
+              clickable: false
+          - obj:
+              x: 18
+              y: 14
+              width: 96
+              height: 48
+              bg_opa: TRANSP
+              border_width: 0
+              clickable: true
+              scrollable: false
+              on_click:
+                - lambda: |-
+                    id(last_heat_mode) = 0;
+                    id(last_normal_mode) = 0;
+                    id(active_normal_mode) = 0;
+                    id(bath_heat)->cmd_mode("heat_bath");
+                    id(refresh_panel_ui).execute();
+          - obj:
+              x: 114
+              y: 14
+              width: 96
+              height: 48
+              bg_opa: TRANSP
+              border_width: 0
+              clickable: true
+              scrollable: false
+              on_click:
+                - lambda: |-
+                    id(last_heat_mode) = 1;
+                    id(last_normal_mode) = 1;
+                    id(active_normal_mode) = 1;
+                    id(bath_heat)->cmd_mode("heat_temp");
+                    id(refresh_panel_ui).execute();
+
+    - button:
+        id: cool_mode_button
+        x: 8
+        y: 280
+        width: 228
+        height: 184
+        radius: 12
+        bg_color: 0x343434
+        bg_grad_color: 0x141414
+        bg_grad_dir: VER
+        bg_opa: COVER
+        border_width: 0
+        outline_width: 0
+        shadow_opa: TRANSP
+        pad_all: 0
+        scrollable: false
+        clickable: true
+        on_click:
+          - lambda: |-
+              int next = id(last_cool_mode);
+              if (id(active_normal_mode) == 2 || id(active_normal_mode) == 3)
+                next = (id(active_normal_mode) == 2) ? 3 : 2;
+              id(last_cool_mode) = next;
+              id(last_normal_mode) = next;
+              id(active_normal_mode) = next;
+              id(bath_heat)->cmd_mode(next == 2 ? "cool_hi" : "cool_lo");
+              id(refresh_panel_ui).execute();
+        widgets:
+          - label:
+              id: cool_mode_title
+              x: 66
+              y: 16
+              width: 96
+              height: 42
+              text: "涼風"
+              text_font: panel_font_30
+              text_align: CENTER
+              clickable: false
+          - label:
+              id: cool_mode_icon
+              x: 84
+              y: 57
+              width: 60
+              height: 54
+              text: "\U000F059D"
+              text_font: panel_mdi_54
+              text_color: 0x777777
+              text_align: CENTER
+              clickable: false
+          - obj:
+              x: 20
+              y: 126
+              width: 188
+              height: 42
+              radius: 21
+              bg_color: 0x0C0C0C
+              bg_opa: COVER
+              border_color: 0x5A5A5A
+              border_width: 1
+              pad_all: 0
+              clickable: false
+              scrollable: false
+              widgets:
+                - obj:
+                    id: cool_mode_switch_thumb
+                    x: 2
+                    y: 2
+                    width: 92
+                    height: 38
+                    radius: 19
+                    bg_color: 0x5A5A5A
+                    bg_grad_color: 0x303030
+                    bg_grad_dir: VER
+                    bg_opa: COVER
+                    border_color: 0x777777
+                    border_width: 1
+                    clickable: false
+                - label:
+                    id: cool_high_label
+                    x: 4
+                    y: 8
+                    width: 88
+                    height: 28
+                    text: "強"
+                    text_font: panel_font_22
+                    text_align: CENTER
+                    clickable: false
+                - label:
+                    id: cool_low_label
+                    x: 98
+                    y: 8
+                    width: 86
+                    height: 28
+                    text: "弱"
+                    text_font: panel_font_22
+                    text_align: CENTER
+                    clickable: false
+          - obj:
+              x: 18
+              y: 124
+              width: 96
+              height: 48
+              bg_opa: TRANSP
+              border_width: 0
+              clickable: true
+              scrollable: false
+              on_click:
+                - lambda: |-
+                    id(last_cool_mode) = 2;
+                    id(last_normal_mode) = 2;
+                    id(active_normal_mode) = 2;
+                    id(bath_heat)->cmd_mode("cool_hi");
+                    id(refresh_panel_ui).execute();
+          - obj:
+              x: 114
+              y: 124
+              width: 96
+              height: 48
+              bg_opa: TRANSP
+              border_width: 0
+              clickable: true
+              scrollable: false
+              on_click:
+                - lambda: |-
+                    id(last_cool_mode) = 3;
+                    id(last_normal_mode) = 3;
+                    id(active_normal_mode) = 3;
+                    id(bath_heat)->cmd_mode("cool_lo");
+                    id(refresh_panel_ui).execute();
+
+    - button:
+        id: vent_mode_button
+        x: 244
+        y: 280
+        width: 228
+        height: 184
+        radius: 12
+        bg_color: 0x343434
+        bg_grad_color: 0x141414
+        bg_grad_dir: VER
+        bg_opa: COVER
+        border_width: 0
+        outline_width: 0
+        shadow_opa: TRANSP
+        pad_all: 0
+        scrollable: false
+        clickable: true
+        on_click:
+          - lambda: |-
+              int next = id(last_vent_mode);
+              if (id(active_normal_mode) == 4 || id(active_normal_mode) == 5)
+                next = (id(active_normal_mode) == 4) ? 5 : 4;
+              id(last_vent_mode) = next;
+              id(last_normal_mode) = next;
+              id(active_normal_mode) = next;
+              id(bath_heat)->cmd_mode(next == 4 ? "vent_hi" : "vent_lo");
+              id(refresh_panel_ui).execute();
+        widgets:
+          - label:
+              id: vent_mode_title
+              x: 66
+              y: 16
+              width: 96
+              height: 42
+              text: "換氣"
+              text_font: panel_font_30
+              text_align: CENTER
+              clickable: false
+          - label:
+              id: vent_mode_icon
+              x: 84
+              y: 57
+              width: 60
+              height: 54
+              text: "\U000F0210"
+              text_font: panel_mdi_54
+              text_color: 0x777777
+              text_align: CENTER
+              clickable: false
+          - obj:
+              x: 20
+              y: 126
+              width: 188
+              height: 42
+              radius: 21
+              bg_color: 0x0C0C0C
+              bg_opa: COVER
+              border_color: 0x5A5A5A
+              border_width: 1
+              pad_all: 0
+              clickable: false
+              scrollable: false
+              widgets:
+                - obj:
+                    id: vent_mode_switch_thumb
+                    x: 2
+                    y: 2
+                    width: 92
+                    height: 38
+                    radius: 19
+                    bg_color: 0x5A5A5A
+                    bg_grad_color: 0x303030
+                    bg_grad_dir: VER
+                    bg_opa: COVER
+                    border_color: 0x777777
+                    border_width: 1
+                    clickable: false
+                - label:
+                    id: vent_high_label
+                    x: 4
+                    y: 8
+                    width: 88
+                    height: 28
+                    text: "強"
+                    text_font: panel_font_22
+                    text_align: CENTER
+                    clickable: false
+                - label:
+                    id: vent_low_label
+                    x: 98
+                    y: 8
+                    width: 86
+                    height: 28
+                    text: "弱"
+                    text_font: panel_font_22
+                    text_align: CENTER
+                    clickable: false
+          - obj:
+              x: 18
+              y: 124
+              width: 96
+              height: 48
+              bg_opa: TRANSP
+              border_width: 0
+              clickable: true
+              scrollable: false
+              on_click:
+                - lambda: |-
+                    id(last_vent_mode) = 4;
+                    id(last_normal_mode) = 4;
+                    id(active_normal_mode) = 4;
+                    id(bath_heat)->cmd_mode("vent_hi");
+                    id(refresh_panel_ui).execute();
+          - obj:
+              x: 114
+              y: 124
+              width: 96
+              height: 48
+              bg_opa: TRANSP
+              border_width: 0
+              clickable: true
+              scrollable: false
+              on_click:
+                - lambda: |-
+                    id(last_vent_mode) = 5;
+                    id(last_normal_mode) = 5;
+                    id(active_normal_mode) = 5;
+                    id(bath_heat)->cmd_mode("vent_lo");
+                    id(refresh_panel_ui).execute();
+
+    # ---------------------------------------------------------------------
+    # 中央電源採參考設計的三層結構：黑色嵌槽、模式色 arc、深色內圓。
+    # 運轉中關閉；關閉／僅 24H 時恢復最後正常模式。
+    # ---------------------------------------------------------------------
+    - button:
+        id: center_power_button
+        x: 162
+        y: 198
+        width: 156
+        height: 156
+        radius: 78
+        bg_color: 0x000000
+        bg_opa: COVER
+        border_width: 0
+        outline_width: 0
+        shadow_opa: TRANSP
+        pad_all: 0
+        scrollable: false
+        clickable: true
+        on_click:
+          - lambda: |-
+              static const char *const MODE_KEYS[8] = {
+                "heat_bath", "heat_temp", "cool_hi", "cool_lo",
+                "vent_hi", "vent_lo", "dry_eco", "dry_fast"
+              };
+              if (id(active_normal_mode) >= 0 && id(active_normal_mode) < 8) {
+                id(last_normal_mode) = id(active_normal_mode);
+                id(active_normal_mode) = -1;
+                id(bath_heat)->request_off();
+              } else {
+                int mode = id(last_normal_mode);
+                if (mode < 0 || mode > 7) mode = 4;
+                id(active_normal_mode) = mode;
+                id(bath_heat)->cmd_mode(MODE_KEYS[mode]);
+              }
+              id(refresh_panel_ui).execute();
+        widgets:
+          - arc:
+              id: center_power_mode_arc
+              align: CENTER
+              width: 136
+              height: 136
+              start_angle: 0
+              end_angle: 360
+              arc_width: 5
+              arc_color: 0x626262
+              arc_rounded: false
+              adjustable: false
+              adv_hittest: false
+              clickable: false
+              hidden: false
+
+          - obj:
+              id: center_power_inner
+              align: CENTER
+              width: 108
+              height: 108
+              radius: 54
+              bg_color: 0x2D2D33
+              bg_opa: COVER
+              border_width: 0
+              shadow_opa: TRANSP
+              pad_all: 0
+              clickable: false
+              scrollable: false
+              widgets:
+                - label:
+                    id: center_power_icon
+                    align: CENTER
+                    y: 2
+                    width: 74
+                    height: 58
+                    text: "\U000F0425"
+                    text_font: panel_mdi_54
+                    text_color: 0xFFFFFF
+                    text_align: CENTER
+                    clickable: false
+                    scrollable: false
+                - label:
+                    id: center_countdown_label
+                    align: CENTER
+                    width: 104
+                    height: 36
+                    text: "--:--"
+                    text_font: panel_digits_30
+                    text_color: 0xFFFFFF
+                    text_align: CENTER
+                    recolor: true
+                    hidden: true
+                    clickable: false
+                    scrollable: false

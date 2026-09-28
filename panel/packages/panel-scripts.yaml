@@ -1,0 +1,727 @@
+# 首頁同步、設定草稿、儲存確認與螢幕休眠腳本
+
+script:
+  - id: open_settings_page
+    mode: restart
+    then:
+      - lambda: |-
+          auto timer_value = [](number::Number *entity, int fallback) {
+            const float value = entity->state;
+            if (!std::isfinite(value)) return fallback;
+            return std::max(10, std::min(720, (int) lroundf(value / 10.0f) * 10));
+          };
+          id(timer_draft_0) = timer_value(id(dry_eco_timer), 60);
+          id(timer_draft_1) = timer_value(id(dry_fast_timer), 30);
+          id(timer_draft_2) = timer_value(id(heat_bath_timer), 30);
+          id(timer_draft_3) = timer_value(id(heat_temp_timer), 20);
+          id(timer_draft_4) = timer_value(id(cool_high_timer), 20);
+          id(timer_draft_5) = timer_value(id(cool_low_timer), 20);
+          id(timer_draft_6) = timer_value(id(vent_high_timer), 30);
+          id(timer_draft_7) = timer_value(id(vent_low_timer), 20);
+          id(settings_brightness_draft) = id(panel_brightness_pct);
+          id(settings_sleep_draft) = id(panel_sleep_index);
+          id(settings_wake_touch_draft) = id(panel_wake_touch_only);
+          id(settings_auto_home_draft) = id(panel_auto_home_index);
+          id(settings_buzzer_draft) = id(bath_heat_buzzer).state;
+          id(settings_heat_temp_draft) = (int) id(bath_heat_temperature).active_index().value_or(5);
+          id(settings_active_tab) = 0;
+          id(timer_settings_page) = 0;
+          id(settings_dirty) = false;
+          id(settings_is_open) = true;
+          id(panel_last_touch_ms) = millis();
+      - lvgl.widget.hide: settings_save_modal
+      - lvgl.page.show:
+          id: settings_page
+          animation: NONE
+          time: 0ms
+      - script.execute: refresh_settings_ui
+
+  - id: close_settings_page
+    mode: restart
+    then:
+      - lvgl.widget.hide: settings_save_modal
+      - lambda: |-
+          id(settings_is_open) = false;
+          id(settings_dirty) = false;
+          id(panel_last_touch_ms) = millis();
+      - lvgl.page.show:
+          id: main_page
+          animation: NONE
+          time: 0ms
+
+  - id: request_settings_exit
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return id(settings_dirty);
+          then:
+            - lvgl.widget.show: settings_save_modal
+          else:
+            - script.execute: close_settings_page
+
+  - id: save_settings_and_exit
+    mode: restart
+    then:
+      - lambda: |-
+          auto save_number = [](number::Number *entity, int value) {
+            auto call = entity->make_call();
+            call.set_value(value);
+            call.perform();
+          };
+          save_number(id(dry_eco_timer), id(timer_draft_0));
+          save_number(id(dry_fast_timer), id(timer_draft_1));
+          save_number(id(heat_bath_timer), id(timer_draft_2));
+          save_number(id(heat_temp_timer), id(timer_draft_3));
+          save_number(id(cool_high_timer), id(timer_draft_4));
+          save_number(id(cool_low_timer), id(timer_draft_5));
+          save_number(id(vent_high_timer), id(timer_draft_6));
+          save_number(id(vent_low_timer), id(timer_draft_7));
+
+          id(panel_brightness_pct) = id(settings_brightness_draft);
+          id(panel_sleep_index) = id(settings_sleep_draft);
+          id(panel_wake_touch_only) = id(settings_wake_touch_draft);
+          id(panel_auto_home_index) = id(settings_auto_home_draft);
+          if (id(settings_buzzer_draft)) id(bath_heat_buzzer).turn_on();
+          else id(bath_heat_buzzer).turn_off();
+          {
+            auto temp_call = id(bath_heat_temperature).make_call();
+            temp_call.set_index((size_t) std::max(0, std::min(10, id(settings_heat_temp_draft))));
+            temp_call.perform();
+          }
+
+          auto light_call = id(display_backlight).turn_on();
+          light_call.set_brightness(id(panel_brightness_pct) / 100.0f);
+          light_call.set_transition_length(0);
+          light_call.perform();
+          id(settings_dirty) = false;
+      - script.execute: close_settings_page
+
+  - id: discard_settings_and_exit
+    mode: restart
+    then:
+      - lambda: |-
+          auto call = id(display_backlight).turn_on();
+          call.set_brightness(id(panel_brightness_pct) / 100.0f);
+          call.set_transition_length(0);
+          call.perform();
+          id(settings_dirty) = false;
+      - script.execute: close_settings_page
+
+  - id: adjust_timer_draft
+    mode: queued
+    parameters:
+      timer_index: int
+      delta: int
+    then:
+      - lambda: |-
+          int *values[] = {
+            &id(timer_draft_0), &id(timer_draft_1), &id(timer_draft_2), &id(timer_draft_3),
+            &id(timer_draft_4), &id(timer_draft_5), &id(timer_draft_6), &id(timer_draft_7)
+          };
+          if (timer_index < 0 || timer_index >= 8) return;
+          *values[timer_index] = std::max(10, std::min(720, *values[timer_index] + delta));
+          id(settings_dirty) = true;
+      - script.execute: refresh_settings_ui
+
+  - id: adjust_option_draft
+    mode: queued
+    parameters:
+      option_index: int
+      delta: int
+    then:
+      - lambda: |-
+          if (option_index == 0)
+            id(settings_sleep_draft) = std::max(0, std::min(6, id(settings_sleep_draft) + delta));
+          else if (option_index == 1)
+            id(settings_auto_home_draft) = std::max(0, std::min(4, id(settings_auto_home_draft) + delta));
+          else if (option_index == 2)
+            id(settings_heat_temp_draft) = std::max(0, std::min(10, id(settings_heat_temp_draft) + delta));
+          id(settings_dirty) = true;
+      - script.execute: refresh_settings_ui
+
+  - id: refresh_settings_ui
+    mode: restart
+    then:
+      - lambda: |-
+          id(settings_loading) = true;
+
+          auto show = [](lv_obj_t *obj, bool visible) {
+            if (visible) lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+          };
+          const int tab = id(settings_active_tab);
+          show(id(settings_timer_content), tab == 0);
+          show(id(settings_general_content), tab == 1);
+          show(id(settings_info_content), tab == 2);
+
+          // 分頁鈕採垂直漸層：選中白→淺灰，未選中與狀態列同色。
+          auto style_tab = [](lv_obj_t *button, bool active) {
+            lv_obj_set_style_bg_color(button, lv_color_hex(active ? 0xFFFFFF : 0x20242C), LV_PART_MAIN);
+            lv_obj_set_style_bg_grad_color(button, lv_color_hex(active ? 0xD0D0D0 : 0x050607), LV_PART_MAIN);
+            lv_obj_set_style_bg_grad_dir(button, LV_GRAD_DIR_VER, LV_PART_MAIN);
+            lv_obj_set_style_border_color(button, lv_color_hex(active ? 0xFFFFFF : 0x555555), LV_PART_MAIN);
+            lv_obj_t *label = lv_obj_get_child(button, 0);
+            if (label != nullptr)
+              lv_obj_set_style_text_color(label, lv_color_hex(active ? 0x000000 : 0xFFFFFF), LV_PART_MAIN);
+          };
+          style_tab(id(settings_tab_timer), tab == 0);
+          style_tab(id(settings_tab_general), tab == 1);
+          style_tab(id(settings_tab_info), tab == 2);
+
+          const bool first_page = id(timer_settings_page) == 0;
+          show(id(timer_page_one), first_page);
+          show(id(timer_page_two), !first_page);
+          lv_label_set_text(id(timer_page_indicator), first_page ? "1 / 2" : "2 / 2");
+          if (first_page) {
+            lv_obj_add_state(id(timer_page_up_button), LV_STATE_DISABLED);
+            lv_obj_clear_state(id(timer_page_down_button), LV_STATE_DISABLED);
+          } else {
+            lv_obj_clear_state(id(timer_page_up_button), LV_STATE_DISABLED);
+            lv_obj_add_state(id(timer_page_down_button), LV_STATE_DISABLED);
+          }
+
+          const int timers[] = {
+            id(timer_draft_0), id(timer_draft_1), id(timer_draft_2), id(timer_draft_3),
+            id(timer_draft_4), id(timer_draft_5), id(timer_draft_6), id(timer_draft_7)
+          };
+          lv_obj_t *timer_labels[] = {
+            id(timer_value_0), id(timer_value_1), id(timer_value_2), id(timer_value_3),
+            id(timer_value_4), id(timer_value_5), id(timer_value_6), id(timer_value_7)
+          };
+          char buffer[32];
+          for (int i = 0; i < 8; i++) {
+            snprintf(buffer, sizeof(buffer), "%d", timers[i]);
+            lv_label_set_text(timer_labels[i], buffer);
+          }
+
+          id(settings_brightness_draft) = std::max(10, std::min(100, id(settings_brightness_draft)));
+          lv_slider_set_value(id(settings_brightness_slider), id(settings_brightness_draft), LV_ANIM_OFF);
+          snprintf(buffer, sizeof(buffer), "%d%%", id(settings_brightness_draft));
+          lv_label_set_text(id(settings_brightness_value), buffer);
+
+          static const char *const SLEEP_VALUES[] = {"", "30", "1", "3", "5", "10", "30"};
+          static const char *const SLEEP_UNITS[] = {"不關閉", "秒", "分鐘", "分鐘", "分鐘", "分鐘", "分鐘"};
+          const int sleep_index = std::max(0, std::min(6, id(settings_sleep_draft)));
+          show(id(settings_sleep_value), sleep_index != 0);
+          lv_label_set_text(id(settings_sleep_value), SLEEP_VALUES[sleep_index]);
+          lv_label_set_text(id(settings_sleep_unit), SLEEP_UNITS[sleep_index]);
+          lv_obj_set_x(id(settings_sleep_unit), sleep_index == 0 ? 246 : 314);
+          lv_obj_set_width(id(settings_sleep_unit), sleep_index == 0 ? 144 : 76);
+          lv_obj_set_style_text_align(id(settings_sleep_unit), sleep_index == 0 ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+
+          static const char *const AUTO_VALUES[] = {"", "30", "1", "3", "5"};
+          static const char *const AUTO_UNITS[] = {"不關閉", "秒", "分鐘", "分鐘", "分鐘"};
+          const int auto_index = std::max(0, std::min(4, id(settings_auto_home_draft)));
+          show(id(settings_auto_home_value), auto_index != 0);
+          lv_label_set_text(id(settings_auto_home_value), AUTO_VALUES[auto_index]);
+          lv_label_set_text(id(settings_auto_home_unit), AUTO_UNITS[auto_index]);
+          lv_obj_set_x(id(settings_auto_home_unit), auto_index == 0 ? 246 : 314);
+          lv_obj_set_width(id(settings_auto_home_unit), auto_index == 0 ? 144 : 76);
+          lv_obj_set_style_text_align(id(settings_auto_home_unit), auto_index == 0 ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+
+          // 溫控溫度：select index 0..10 對應 25..35°C（與元件 LifegearHeatTemperatureSelect 一致）
+          id(settings_heat_temp_draft) = std::max(0, std::min(10, id(settings_heat_temp_draft)));
+          snprintf(buffer, sizeof(buffer), "%d", 25 + id(settings_heat_temp_draft));
+          lv_label_set_text(id(settings_heat_temp_value), buffer);
+
+          auto style_toggle = [](lv_obj_t *button, lv_obj_t *label, bool enabled) {
+            lv_obj_set_style_bg_color(button, lv_color_hex(enabled ? 0x264B22 : 0x383838), LV_PART_MAIN);
+            lv_obj_set_style_border_color(button, lv_color_hex(enabled ? 0x79C667 : 0x666666), LV_PART_MAIN);
+            lv_label_set_text(label, enabled ? "開啟" : "關閉");
+            lv_obj_set_style_text_color(label, lv_color_hex(enabled ? 0xB6F3A8 : 0xB0B0B0), LV_PART_MAIN);
+          };
+          style_toggle(id(settings_wake_touch_button), id(settings_wake_touch_value), id(settings_wake_touch_draft));
+          style_toggle(id(settings_buzzer_button), id(settings_buzzer_value), id(settings_buzzer_draft));
+
+          // 網路與濾網資訊已移到主頁彈窗（refresh_home_popups）。
+          if (id(bath_heat_host_status).has_state()) {
+            const std::string &host = id(bath_heat_host_status).state;
+            lv_label_set_text(id(settings_info_host),
+                              host.rfind("24h", 0) == 0 ? "換氣" : host.c_str());
+          } else {
+            lv_label_set_text(id(settings_info_host), "等待回報");
+          }
+          static const char *const MODE_NAMES[] = {
+            "暖房沐浴", "暖房溫控", "涼風強", "涼風弱",
+            "換氣強", "換氣弱", "乾燥節電", "乾燥快速"
+          };
+          const int active_mode = id(active_normal_mode);
+          if (active_mode >= 0 && active_mode < 8)
+            lv_label_set_text(id(settings_info_mode), MODE_NAMES[active_mode]);
+          else
+            lv_label_set_text(id(settings_info_mode), id(bath_heat_vent24).state ? "換氣" : "關機");
+
+          lv_label_set_text(id(settings_info_panel_version), "${LAST_UPDATE}");
+          if (id(panel_uptime_hours).has_state())
+            snprintf(buffer, sizeof(buffer), "%.1f h", id(panel_uptime_hours).state);
+          else
+            snprintf(buffer, sizeof(buffer), "-- h");
+          lv_label_set_text(id(settings_info_uptime), buffer);
+
+          id(settings_loading) = false;
+
+  - id: sleep_panel_screen
+    mode: restart
+    then:
+      - lambda: |-
+          if (!id(panel_screen_awake)) return;
+          id(panel_screen_awake) = false;
+          auto call = id(display_backlight).turn_off();
+          call.set_transition_length(0);
+          call.perform();
+      - lvgl.pause:
+          show_snow: false
+
+  - id: wake_panel_screen
+    mode: restart
+    then:
+      - lambda: |-
+          if (id(panel_screen_awake)) return;
+          id(panel_screen_awake) = true;
+          id(panel_last_touch_ms) = millis();
+          auto call = id(display_backlight).turn_on();
+          call.set_brightness(id(panel_brightness_pct) / 100.0f);
+          call.set_transition_length(0);
+          call.perform();
+      - if:
+          condition:
+            lambda: return id(panel_wake_touch_only);
+          then:
+            - delay: 250ms
+      - lvgl.resume
+
+  # ---------------------------------------------------------------------------
+  # 主頁彈窗：濾網（累計時數／提醒門檻／重置）與網路資訊
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # 面板上直接選 WiFi（掃描 → 選網路 → 輸密碼 → save_wifi_sta 存 NVS）
+  # ---------------------------------------------------------------------------
+  - id: wifi_setup_entry
+    mode: restart
+    then:
+      - if:
+          condition: wifi.connected
+          then:
+            # 已連線: 「重設網路」→ 先確認是否清除現有連線
+            - lvgl.widget.show: wifi_reset_confirm
+          else:
+            - script.execute: open_wifi_setup
+
+  - id: wifi_reset_and_rescan
+    mode: restart
+    then:
+      - lvgl.widget.hide: wifi_reset_confirm
+      - lvgl.widget.hide: wifi_popup
+      - lambda: |-
+          auto *wc = wifi::global_wifi_component;
+          if (wc != nullptr) {
+            // 清掉執行中的 STA 並重啟無線 → 回到未設定狀態, 熱點自動回來。
+            // 不動 NVS(開機載入無空字串防護); 若放棄未選新網路, 重開機會連回原網路。
+            wc->clear_sta();
+            wc->disable();
+            wc->enable();
+          }
+          id(home_popup_open) = true;
+          id(panel_last_touch_ms) = millis();
+          lv_label_set_text(id(wifi_setup_status), "掃描中");
+      - lvgl.widget.show: wifi_setup_page
+      # enable 後 radio 需要時間就緒, 立刻掃會失敗 (26.09.13 教訓)
+      - delay: 3s
+      - lambda: |-
+          auto *wc = wifi::global_wifi_component;
+          if (wc != nullptr && !wc->is_connected()) wc->start_scanning();
+      - script.execute: refresh_wifi_setup_list
+
+  - id: open_wifi_setup
+    mode: restart
+    then:
+      - lvgl.widget.hide: wifi_popup
+      - lambda: |-
+          id(home_popup_open) = true;
+          id(panel_last_touch_ms) = millis();
+          auto *wc = wifi::global_wifi_component;
+          if (wc != nullptr && wc->is_connected()) {
+            // 已連線時不自動掃描（掃描要先斷線）; 由使用者按「重新掃描」再斷開掃。
+            lv_label_set_text(id(wifi_setup_status), "重新掃描會暫時中斷目前連線");
+          } else {
+            if (wc != nullptr) wc->start_scanning();
+            lv_label_set_text(id(wifi_setup_status), "掃描中");
+          }
+      - lvgl.widget.show: wifi_setup_page
+      - script.execute: refresh_wifi_setup_list
+
+  - id: refresh_wifi_setup_list
+    mode: restart
+    then:
+      - lambda: |-
+          auto *wc = wifi::global_wifi_component;
+          if (wc == nullptr) return;
+          std::vector<const wifi::WiFiScanResult *> list;
+          for (auto &r : wc->get_scan_result())
+            if (!r.get_is_hidden() && !r.get_ssid().empty()) list.push_back(&r);
+          std::sort(list.begin(), list.end(),
+                    [](const wifi::WiFiScanResult *a, const wifi::WiFiScanResult *b) {
+                      return a->get_rssi() > b->get_rssi();
+                    });
+          lv_obj_t *rows[6] = {id(wifi_row_0), id(wifi_row_1), id(wifi_row_2),
+                               id(wifi_row_3), id(wifi_row_4), id(wifi_row_5)};
+          lv_obj_t *names[6] = {id(wifi_row_ssid_0), id(wifi_row_ssid_1), id(wifi_row_ssid_2),
+                                id(wifi_row_ssid_3), id(wifi_row_ssid_4), id(wifi_row_ssid_5)};
+          lv_obj_t *quals[6] = {id(wifi_row_qual_0), id(wifi_row_qual_1), id(wifi_row_qual_2),
+                                id(wifi_row_qual_3), id(wifi_row_qual_4), id(wifi_row_qual_5)};
+          int n = 0;
+          std::vector<std::string> seen;
+          for (auto *r : list) {
+            if (n >= 6) break;
+            bool dup = false;
+            for (auto &s : seen)
+              if (s == r->get_ssid()) { dup = true; break; }
+            if (dup) continue;
+            seen.push_back(r->get_ssid());
+            lv_label_set_text(names[n], r->get_ssid().c_str());
+            const int dbm = r->get_rssi();
+            lv_label_set_text(quals[n], dbm >= -60 ? "優良" : (dbm >= -70 ? "正常" : "微弱"));
+            lv_obj_clear_flag(rows[n], LV_OBJ_FLAG_HIDDEN);
+            n++;
+          }
+          for (int i = n; i < 6; i++) lv_obj_add_flag(rows[i], LV_OBJ_FLAG_HIDDEN);
+          // 有結果才清狀態文字; 清單空時保留原本的提示（掃描中／已連線提示）。
+          if (n > 0) lv_label_set_text(id(wifi_setup_status), "");
+
+  - id: open_wifi_pw_page
+    mode: restart
+    then:
+      - lambda: |-
+          lv_label_set_text(id(wifi_pw_ssid), id(wifi_setup_selected_ssid).c_str());
+          lv_textarea_set_text(id(wifi_pw_input), "");
+          lv_label_set_text(id(wifi_pw_status), "");
+      - lvgl.widget.hide: wifi_setup_page
+      - lvgl.widget.show: wifi_pw_page
+
+  - id: wifi_connect_start
+    mode: restart
+    then:
+      - lambda: |-
+          if (id(wifi_setup_selected_ssid).empty()) return;
+          lv_label_set_text(id(wifi_pw_status), "連線中");
+          // save_wifi_sta 直接寫入 NVS 並開始嘗試連線（與 captive portal 同一條路）
+          wifi::global_wifi_component->save_wifi_sta(
+              id(wifi_setup_selected_ssid),
+              lv_textarea_get_text(id(wifi_pw_input)));
+      - wait_until:
+          condition: wifi.connected
+          timeout: 20s
+      - if:
+          condition: wifi.connected
+          then:
+            - lambda: lv_label_set_text(id(wifi_pw_status), "已連線");
+            - delay: 1200ms
+            - script.execute: close_home_popups
+          else:
+            - lambda: lv_label_set_text(id(wifi_pw_status), "連線失敗");
+
+  # 24h 換氣長按 2 秒切換：on_press 啟動、on_release 取消；撐滿 2 秒才會執行 toggle。
+  - id: vent24_hold_toggle
+    mode: restart
+    then:
+      - delay: 2s
+      - switch.toggle: bath_heat_vent24
+
+  # 短按 24h 鈕的提示，1.5 秒自動消失；文字依目前狀態顯示開啟或關閉。
+  - id: vent24_hint_show
+    mode: restart
+    then:
+      - lambda: |-
+          lv_label_set_text(id(vent24_hint_label),
+              id(bath_heat_vent24).state ? "請長按兩秒關閉" : "請長按兩秒開啟");
+      - lvgl.widget.show: vent24_hint
+      - delay: 1500ms
+      - lvgl.widget.hide: vent24_hint
+
+  - id: open_filter_popup
+    mode: restart
+    then:
+      - lambda: |-
+          id(filter_threshold_draft) = (int) id(bath_heat_filter_threshold).active_index().value_or(0);
+          id(filter_popup_dirty) = false;
+          id(home_popup_open) = true;
+          id(panel_last_touch_ms) = millis();
+      - script.execute: refresh_home_popups
+      - lvgl.widget.hide: filter_reset_confirm
+      - lvgl.widget.hide: filter_save_modal
+      - lvgl.widget.show: filter_popup
+
+  - id: adjust_filter_threshold_draft
+    mode: queued
+    parameters:
+      delta: int
+    then:
+      - lambda: |-
+          id(filter_threshold_draft) = std::max(0, std::min(2, id(filter_threshold_draft) + delta));
+          const int current = (int) id(bath_heat_filter_threshold).active_index().value_or(0);
+          id(filter_popup_dirty) = id(filter_threshold_draft) != current;
+      - script.execute: refresh_home_popups
+
+  - id: request_filter_popup_close
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return id(filter_popup_dirty);
+          then:
+            - lvgl.widget.show: filter_save_modal
+          else:
+            - script.execute: close_home_popups
+
+  - id: filter_popup_save_and_close
+    mode: restart
+    then:
+      - lambda: |-
+          auto call = id(bath_heat_filter_threshold).make_call();
+          call.set_index((size_t) id(filter_threshold_draft));
+          call.perform();
+          id(filter_popup_dirty) = false;
+      - script.execute: close_home_popups
+
+  - id: filter_popup_discard_and_close
+    mode: restart
+    then:
+      - lambda: id(filter_popup_dirty) = false;
+      - script.execute: close_home_popups
+
+  - id: confirm_filter_reset
+    mode: restart
+    then:
+      - lvgl.widget.hide: filter_reset_confirm
+      - button.press: bath_heat_filter_reset
+      - delay: 300ms
+      - script.execute: refresh_home_popups
+
+  - id: open_wifi_popup
+    mode: restart
+    then:
+      - lambda: |-
+          id(home_popup_open) = true;
+          id(panel_last_touch_ms) = millis();
+      - script.execute: refresh_home_popups
+      - lvgl.widget.show: wifi_popup
+
+  - id: close_home_popups
+    mode: restart
+    then:
+      - lvgl.widget.hide: filter_save_modal
+      - lvgl.widget.hide: filter_reset_confirm
+      - lvgl.widget.hide: filter_popup
+      - lvgl.widget.hide: wifi_popup
+      - lvgl.widget.hide: wifi_setup_page
+      - lvgl.widget.hide: wifi_pw_page
+      - lvgl.widget.hide: wifi_reset_confirm
+      - lambda: |-
+          id(home_popup_open) = false;
+          id(filter_popup_dirty) = false;
+          id(panel_last_touch_ms) = millis();
+
+  - id: refresh_home_popups
+    mode: restart
+    then:
+      - lambda: |-
+          char buffer[40];
+
+          // 濾網
+          if (id(bath_heat_filter_hours).has_state())
+            snprintf(buffer, sizeof(buffer), "%.1f", id(bath_heat_filter_hours).state);
+          else
+            snprintf(buffer, sizeof(buffer), "--");
+          lv_label_set_text(id(filter_popup_hours), buffer);
+          static const int THRESHOLD_HOURS[3] = {720, 1440, 2160};  // 與元件 select 對應
+          const int draft = std::max(0, std::min(2, id(filter_threshold_draft)));
+          snprintf(buffer, sizeof(buffer), "%d", THRESHOLD_HOURS[draft]);
+          lv_label_set_text(id(filter_popup_threshold), buffer);
+
+          // 網路
+          lv_label_set_text(id(wifi_popup_hostname), App.get_name().c_str());
+          lv_label_set_text(id(wifi_popup_mac), get_mac_address_pretty().c_str());
+          const bool wifi_ok = wifi::global_wifi_component != nullptr &&
+                               wifi::global_wifi_component->is_connected();
+          // 連上 WiFi：顯示 SSID / 訊號；未連線：同兩列改顯示初始設定熱點名稱與密碼
+          //（熱點名稱 = 裝置名稱含 MAC 後綴，密碼要跟主檔 ap.password 一致）。
+          auto row_show = [](lv_obj_t *obj, bool visible) {
+            if (visible) lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+          };
+          row_show(id(wifi_popup_ssid_label), wifi_ok);
+          row_show(id(wifi_popup_rssi_label), wifi_ok);
+          row_show(id(wifi_popup_quality), wifi_ok);
+          row_show(id(wifi_popup_ap_label), !wifi_ok);
+          row_show(id(wifi_popup_pw_label), !wifi_ok);
+          lv_label_set_text(id(wifi_popup_setup_label), wifi_ok ? "重設網路" : "選擇網路");
+          if (wifi_ok) {
+            if (id(panel_ip_address).has_state())
+              lv_label_set_text(id(wifi_popup_ip), id(panel_ip_address).state.c_str());
+            else
+              lv_label_set_text(id(wifi_popup_ip), "0.0.0.0");
+            lv_label_set_text(id(wifi_popup_ssid), wifi::global_wifi_component->wifi_ssid().c_str());
+            // 彈窗每秒刷新，直接讀即時 RSSI，不用 60 秒一次的 sensor。
+            const int dbm = wifi::global_wifi_component->wifi_rssi();
+            snprintf(buffer, sizeof(buffer), "%d dBm", dbm);
+            lv_label_set_text(id(wifi_popup_rssi), buffer);
+            lv_label_set_text(id(wifi_popup_quality), dbm >= -60 ? "優良" : (dbm >= -70 ? "正常" : "微弱"));
+          } else {
+            lv_label_set_text(id(wifi_popup_ip), "192.168.4.1");  // 熱點模式下面板自己的位址
+            lv_label_set_text(id(wifi_popup_ssid), App.get_name().c_str());
+            lv_label_set_text(id(wifi_popup_rssi), "12345678");
+          }
+          const bool ha_ok = api::global_api_server != nullptr &&
+                             api::global_api_server->is_connected();
+          lv_label_set_text(id(wifi_popup_ha), ha_ok ? "已連線" : "未連線");
+
+  - id: countdown_hold_kick
+    mode: restart
+    then:
+      - delay: 520ms
+      - script.execute: refresh_countdown_label
+
+  - id: refresh_countdown_label
+    mode: restart
+    then:
+      - lambda: |-
+          // 冒號閃爍用 LVGL recolor 把冒號染成內圓底色，寬度不變、數字不跳動。
+          if (lv_obj_has_flag(id(center_countdown_label), LV_OBJ_FLAG_HIDDEN)) return;
+          // 模式剛切換：遮 --:-- 直到新剩餘時間到達（最少 0.5 秒、最多 3 秒）。
+          const uint32_t now_ms = millis();
+          const bool in_min_hold = (int32_t) (id(countdown_hold_until_ms) - now_ms) > 0;
+          const bool waiting = id(countdown_wait_fresh) &&
+                               (int32_t) (id(countdown_hold_max_ms) - now_ms) > 0;
+          if (in_min_hold || waiting) {
+            lv_label_set_text(id(center_countdown_label), "--:--");
+            return;
+          }
+          char countdown[24];
+          if (id(bath_heat_timer_left).has_state() &&
+              std::isfinite(id(bath_heat_timer_left).state)) {
+            const int minutes = std::max(0, (int) lroundf(id(bath_heat_timer_left).state));
+            const char *colon = id(countdown_colon_on) ? ":" : "#2D2D33 :#";
+            snprintf(countdown, sizeof(countdown), "%02d%s%02d",
+                     minutes / 60, colon, minutes % 60);
+          } else {
+            snprintf(countdown, sizeof(countdown), "--:--");
+          }
+          lv_label_set_text(id(center_countdown_label), countdown);
+
+  - id: refresh_panel_ui
+    mode: restart
+    then:
+      - lambda: |-
+          const int active = id(active_normal_mode);
+          // 模式切換視覺回饋：倒數先顯示 --:--，直到機器回報「新的」剩餘時間才換上
+          // （timer_left on_value 會清 wait_fresh）。最少遮 0.5 秒讓切換看得到，
+          // 最多遮 3 秒保底（新舊定時相同時機器不會重新發佈）。
+          static int last_refresh_mode = -999;
+          if (last_refresh_mode != -999 && last_refresh_mode != active && active >= 0) {
+            const uint32_t now_ms = millis();
+            id(countdown_hold_until_ms) = now_ms + 500;
+            id(countdown_hold_max_ms) = now_ms + 3000;
+            id(countdown_wait_fresh) = true;
+            id(countdown_hold_kick).execute();  // 最短遮罩到期後立刻重繪
+          }
+          last_refresh_mode = active;
+          const bool heat_active = active == 0 || active == 1;
+          const bool cool_active = active == 2 || active == 3;
+          const bool vent_active = active == 4 || active == 5;
+          const bool dry_active = active == 6 || active == 7;
+
+          // 四張卡片、圖示、漸層與左右 switch 全部由 LVGL 動態繪製。
+          lv_label_set_text(id(dry_mode_title), "乾燥");
+          lv_label_set_text(id(dry_eco_label), "節電");
+          lv_label_set_text(id(dry_fast_label), "快速");
+          lv_label_set_text(id(heat_mode_title), "暖房");
+          lv_label_set_text(id(heat_bath_label), "沐浴");
+          lv_label_set_text(id(heat_temp_label), "溫控");
+          lv_label_set_text(id(cool_mode_title), "涼風");
+          lv_label_set_text(id(cool_high_label), "強");
+          lv_label_set_text(id(cool_low_label), "弱");
+          lv_label_set_text(id(vent_mode_title), "換氣");
+          lv_label_set_text(id(vent_high_label), "強");
+          lv_label_set_text(id(vent_low_label), "弱");
+
+          auto set_card = [](lv_obj_t *card, lv_obj_t *title, lv_obj_t *icon,
+                             bool enabled, uint32_t top_color,
+                             uint32_t bottom_color) {
+            lv_obj_set_style_bg_color(
+                card, lv_color_hex(enabled ? top_color : 0x343434), LV_PART_MAIN);
+            lv_obj_set_style_bg_grad_color(
+                card, lv_color_hex(enabled ? bottom_color : 0x141414), LV_PART_MAIN);
+            lv_obj_set_style_bg_grad_dir(card, LV_GRAD_DIR_VER, LV_PART_MAIN);
+            lv_obj_set_style_border_width(card, 0, LV_PART_MAIN);
+            lv_obj_set_style_text_color(
+                title, lv_color_hex(enabled ? 0xFFFFFF : 0x777777), LV_PART_MAIN);
+            lv_obj_set_style_text_color(
+                icon, lv_color_hex(enabled ? 0xFFFFFF : 0x686868), LV_PART_MAIN);
+          };
+
+          set_card(id(dry_mode_button), id(dry_mode_title), id(dry_mode_icon),
+                   dry_active, 0x8C6500, 0x2A1B00);
+          set_card(id(heat_mode_button), id(heat_mode_title), id(heat_mode_icon),
+                   heat_active, 0x8A2F10, 0x2A0D08);
+          set_card(id(cool_mode_button), id(cool_mode_title), id(cool_mode_icon),
+                   cool_active, 0x075A82, 0x061D2A);
+          set_card(id(vent_mode_button), id(vent_mode_title), id(vent_mode_icon),
+                   vent_active, 0x39661F, 0x11210D);
+
+          auto set_switch = [](lv_obj_t *thumb, lv_obj_t *left_label,
+                               lv_obj_t *right_label, bool left_selected,
+                               bool enabled, uint32_t accent_top,
+                               uint32_t accent_bottom) {
+            lv_obj_set_x(thumb, left_selected ? 2 : 94);
+            lv_obj_set_style_bg_color(
+                thumb, lv_color_hex(enabled ? accent_top : 0x5A5A5A), LV_PART_MAIN);
+            lv_obj_set_style_bg_grad_color(
+                thumb, lv_color_hex(enabled ? accent_bottom : 0x303030), LV_PART_MAIN);
+            lv_obj_set_style_bg_grad_dir(thumb, LV_GRAD_DIR_VER, LV_PART_MAIN);
+            lv_obj_set_style_border_color(
+                thumb, lv_color_hex(enabled ? accent_top : 0x777777), LV_PART_MAIN);
+            lv_obj_set_style_text_color(
+                left_label,
+                lv_color_hex(left_selected ? (enabled ? 0xFFFFFF : 0xE8E8E8) : 0x858585),
+                LV_PART_MAIN);
+            lv_obj_set_style_text_color(
+                right_label,
+                lv_color_hex(!left_selected ? (enabled ? 0xFFFFFF : 0xE8E8E8) : 0x858585),
+                LV_PART_MAIN);
+          };
+
+          set_switch(id(dry_mode_switch_thumb), id(dry_eco_label), id(dry_fast_label),
+                     id(last_dry_mode) == 6, dry_active, 0xFFB000, 0x8A5E00);
+          set_switch(id(heat_mode_switch_thumb), id(heat_bath_label), id(heat_temp_label),
+                     id(last_heat_mode) == 0, heat_active, 0xFF5A00, 0x8A2A08);
+          set_switch(id(cool_mode_switch_thumb), id(cool_high_label), id(cool_low_label),
+                     id(last_cool_mode) == 2, cool_active, 0x009FE8, 0x075A82);
+          set_switch(id(vent_mode_switch_thumb), id(vent_high_label), id(vent_low_label),
+                     id(last_vent_mode) == 4, vent_active, 0x55A825, 0x2B5B17);
+
+          if (active >= 0 && active < 8) {
+            static const uint32_t MODE_COLORS[8] = {
+              0xFF5A00, 0xFF5A00, 0x009FE8, 0x009FE8,
+              0x55A825, 0x55A825, 0xFFB000, 0xFFB000
+            };
+            // 參考 Guition repo：獨立 360° arc 位於黑色嵌槽與內圓之間。
+            lv_obj_set_style_arc_color(id(center_power_mode_arc),
+                                       lv_color_hex(MODE_COLORS[active]),
+                                       LV_PART_MAIN);
+            lv_obj_clear_flag(id(center_power_mode_arc), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(center_power_icon), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(center_countdown_label), LV_OBJ_FLAG_HIDDEN);
+            id(refresh_countdown_label).execute();
+          } else {
+            // 關機保留灰色圓環；啟動後再由目前模式替換成對應色。
+            lv_obj_set_style_arc_color(id(center_power_mode_arc),
+                                       lv_color_hex(0x626262),
+                                       LV_PART_MAIN);
+            lv_obj_clear_flag(id(center_power_mode_arc), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(center_power_icon), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(center_countdown_label), LV_OBJ_FLAG_HIDDEN);
+          }
+
+# =============================================================================
+# 時間與連線狀態

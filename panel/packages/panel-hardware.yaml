@@ -1,0 +1,235 @@
+# Guition ESP32-S3-4848S040 顯示、觸控、背光與字型
+
+ota:
+  - platform: esphome
+    on_begin:
+      - light.turn_off:
+          id: display_backlight
+          transition_length: 0s
+
+# =============================================================================
+output:
+  - platform: ledc
+    id: backlight_output
+    pin: GPIO38
+    frequency: 150Hz
+    min_power: 0.01
+    zero_means_zero: true
+
+light:
+  - platform: monochromatic
+    name: "Panel Backlight 面板背光"
+    id: display_backlight
+    output: backlight_output
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+    # HA 直接關閉背光時也必須立刻暫停 LVGL，避免第一下觸控穿透。
+    on_turn_off:
+      - lambda: |-
+          id(panel_screen_awake) = false;
+          id(panel_last_touch_ms) = millis();
+      - lvgl.pause:
+          show_snow: false
+    # HA 直接開啟背光時恢復畫面；由喚醒腳本開啟時則由腳本自行恢復，
+    # 避免在「首次觸控僅喚醒」的保護時間內提早接收觸控。
+    on_turn_on:
+      - if:
+          condition:
+            lambda: return !id(panel_screen_awake);
+          then:
+            - lambda: |-
+                id(panel_screen_awake) = true;
+                id(panel_last_touch_ms) = millis();
+            - delay: 250ms
+            - lvgl.resume
+
+spi:
+  - id: lcd_spi
+    clk_pin: GPIO48
+    mosi_pin: GPIO47
+
+i2c:
+  - id: touchscreen_bus
+    sda: GPIO19
+    scl:
+      number: GPIO45
+      ignore_strapping_warning: true
+
+display:
+  - platform: st7701s
+    id: tft_display
+    dimensions:
+      width: 480
+      height: 480
+    spi_mode: MODE3
+    data_rate: 2MHz
+    color_order: RGB
+    invert_colors: false
+    cs_pin: GPIO39
+    de_pin: GPIO18
+    hsync_pin: GPIO16
+    vsync_pin: GPIO17
+    pclk_pin: GPIO21
+    pclk_frequency: 12MHz
+    pclk_inverted: false
+    hsync_pulse_width: 8
+    hsync_front_porch: 10
+    hsync_back_porch: 20
+    vsync_pulse_width: 8
+    vsync_front_porch: 10
+    vsync_back_porch: 10
+    update_interval: never
+    auto_clear_enabled: false
+    init_sequence:
+      - 1
+      - [0xFF, 0x77, 0x01, 0x00, 0x00, 0x10]
+      - [0xCD, 0x00]
+    data_pins:
+      red: [11, 12, 13, 14, 0]
+      green: [8, 20, 3, 46, 9, 10]
+      blue: [4, 5, 6, 7, 15]
+
+touchscreen:
+  - platform: gt911
+    id: tft_touch
+    display: tft_display
+    on_touch:
+      - lambda: id(panel_last_touch_ms) = millis();
+      - if:
+          condition:
+            lambda: |-
+              // 以背光的實際狀態做第二層保護，涵蓋 HA 關閉與狀態同步競速。
+              if (!id(display_backlight).current_values.is_on())
+                id(panel_screen_awake) = false;
+              return !id(panel_screen_awake);
+          then:
+            - script.execute: wake_panel_screen
+
+# =============================================================================
+# 字型（編譯時由 ESPHome 從官方來源下載，repo 內不附字型檔）
+#   jf-openhuninn 2.1（OFL）、Material Design Icons 7.2.96、Roboto / Nunito（Google Fonts）
+# =============================================================================
+font:
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/justfont/open-huninn-font/v2.1/font/jf-openhuninn-2.1.ttf
+    id: panel_font_22
+    size: 22
+    bpp: 4
+    glyphs: "0123456789:.-%°C乾燥暖房涼風換氣節電快速沐浴溫控強弱"
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/justfont/open-huninn-font/v2.1/font/jf-openhuninn-2.1.ttf
+    id: panel_font_30
+    size: 32  # 四大模式標題（原 30，+2）
+    bpp: 4
+    glyphs: "乾燥暖房涼風換氣"
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 500
+    id: panel_digits_30
+    size: 32  # 中央倒數（原 30，+2）
+    bpp: 4
+    glyphs: "0123456789:.-%°C"
+  - file:
+      type: gfonts
+      family: Nunito
+      weight: 800
+    id: panel_digits_36
+    size: 36
+    bpp: 4
+    glyphs: "0123456789:-"
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/justfont/open-huninn-font/v2.1/font/jf-openhuninn-2.1.ttf
+    id: settings_zh_16
+    size: 18
+    bpp: 4
+    glyphs: "中返回定時設資訊乾燥節電快速暖房沐浴溫控涼風強弱換氣分螢幕亮度睡眠不關閉秒鐘首次觸僅喚醒自動頁按鍵音開啟網路連線主機狀態目前模式濾累計運轉小重置面板版本系統間優良正常微已未儲存並取消變更是否要第等待報知尚提數蜂鳴熱點密碼名稱選擇掃描失敗輸入新會暫斷請長兩"
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/justfont/open-huninn-font/v2.1/font/jf-openhuninn-2.1.ttf
+    id: wifi_qual_zh_20
+    size: 20
+    bpp: 4
+    glyphs: "優良正常微弱"
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/justfont/open-huninn-font/v2.1/font/jf-openhuninn-2.1.ttf
+    id: settings_zh_20
+    size: 22
+    bpp: 4
+    glyphs: "中返回定時設資訊乾燥節電快速暖房沐浴溫控涼風強弱換氣分螢幕亮度睡眠不關閉秒鐘首次觸僅喚醒自動頁按鍵音開啟網路連線主機狀態目前模式濾累計運轉小重置面板版本系統間優良正常微已未儲存並取消變更是否要第等待報知尚提數蜂鳴熱點密碼名稱選擇掃描失敗輸入新會暫斷請長兩"
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/justfont/open-huninn-font/v2.1/font/jf-openhuninn-2.1.ttf
+    id: settings_zh_24
+    size: 26
+    bpp: 4
+    glyphs: "中返回定時設資訊乾燥節電快速暖房沐浴溫控涼風強弱換氣分螢幕亮度睡眠不關閉秒鐘首次觸僅喚醒自動頁按鍵音開啟網路連線主機狀態目前模式濾累計運轉小重置面板版本系統間優良正常微已未儲存並取消變更是否要第等待報知尚提數蜂鳴熱點密碼名稱選擇掃描失敗輸入新會暫斷請長兩"
+  - file:
+      type: gfonts
+      family: Nunito
+      weight: 600
+    id: settings_en_16
+    size: 18
+    bpp: 4
+    glyphs: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.:,/%-+<>_()#°!@$&*?=;~^[]{}|' "
+  - file:
+      type: gfonts
+      family: Nunito
+      weight: 600
+    id: settings_en_20
+    size: 22
+    bpp: 4
+    glyphs: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.:,/%-+<>_()#°!@$&*?=;~^[]{}|' "
+  - file:
+      type: gfonts
+      family: Nunito
+      weight: 600
+    id: settings_en_26
+    size: 28
+    bpp: 4
+    glyphs: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.:,/%-+<>_()#°!@$&*?=;~^[]{}|' "
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/v7.2.96/fonts/materialdesignicons-webfont.ttf
+    id: panel_mdi_34
+    size: 34
+    bpp: 4
+    glyphs:
+      - "\U000F08BE" # signal-cellular-3
+      - "\U000F1478" # hours-24
+      - "\U000F0D43" # air-filter
+      - "\U000F0493" # cog
+      - "\U000F0425" # power
+      - "\U000F0143" # chevron-up
+      - "\U000F0140" # chevron-down
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/v7.2.96/fonts/materialdesignicons-webfont.ttf
+    id: settings_mdi_34
+    size: 34
+    bpp: 4
+    glyphs:
+      - "\U000F0731" # arrow-left-bold
+      - "\U000F0734" # arrow-right-bold
+      - "\U000F0737" # arrow-up-bold
+      - "\U000F072E" # arrow-down-bold
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/v7.2.96/fonts/materialdesignicons-webfont.ttf
+    id: panel_mdi_54
+    size: 54
+    bpp: 4
+    glyphs:
+      - "\U000F0425" # power
+      - "\U000F0599" # weather-sunny / dry
+      - "\U000F0238" # fire / heat
+      - "\U000F059D" # weather-windy / cool
+      - "\U000F0210" # fan / vent
+
+# =============================================================================
+# LVGL 主頁
+# =============================================================================

@@ -1,0 +1,289 @@
+# 面板啟動、狀態記憶、時鐘與週期更新
+
+esphome:
+  on_boot:
+    - priority: -100
+      then:
+        - lambda: |-
+            // 保留 WiFi 掃描結果 (esphome 連線成功後預設會清空, 清單頁會撿不到)
+            if (wifi::global_wifi_component != nullptr)
+              wifi::global_wifi_component->set_keep_scan_results(true);
+            auto call = id(display_backlight).turn_on();
+            call.set_brightness(id(panel_brightness_pct) / 100.0f);
+            call.set_transition_length(0);
+            call.perform();
+            id(panel_screen_awake) = true;
+            id(panel_last_touch_ms) = millis();
+        - delay: 1s
+        - script.execute: refresh_panel_ui
+
+globals:
+  - id: last_heat_mode
+    type: int
+    restore_value: true
+    initial_value: "0"
+  - id: last_cool_mode
+    type: int
+    restore_value: true
+    initial_value: "2"
+  - id: last_vent_mode
+    type: int
+    restore_value: true
+    initial_value: "4"
+  - id: last_dry_mode
+    type: int
+    restore_value: true
+    initial_value: "6"
+  - id: last_normal_mode
+    type: int
+    restore_value: true
+    initial_value: "4"
+  - id: active_normal_mode
+    type: int
+    restore_value: false
+    initial_value: "-1"
+  - id: panel_brightness_pct
+    type: int
+    restore_value: true
+    initial_value: "70"
+  - id: panel_sleep_index
+    type: int
+    restore_value: true
+    initial_value: "4" # 5 分鐘
+  - id: panel_wake_touch_only
+    type: bool
+    restore_value: true
+    initial_value: "true"
+  - id: panel_auto_home_index
+    type: int
+    restore_value: true
+    initial_value: "3" # 3 分鐘
+  - id: panel_screen_awake
+    type: bool
+    restore_value: false
+    initial_value: "true"
+  - id: panel_last_touch_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+  - id: countdown_colon_on
+    type: bool
+    restore_value: false
+    initial_value: "true"
+  - id: countdown_hold_until_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+  - id: countdown_hold_max_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+  - id: countdown_wait_fresh
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: home_popup_open
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: filter_threshold_draft
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: wifi_setup_selected_ssid
+    type: std::string
+    restore_value: false
+  - id: filter_popup_dirty
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: settings_is_open
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: settings_dirty
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: settings_loading
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: settings_active_tab
+    type: int
+    restore_value: false
+    initial_value: "0" # 0定時 1設定 2資訊
+  - id: timer_settings_page
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: timer_draft_0
+    type: int
+    restore_value: false
+    initial_value: "60"
+  - id: timer_draft_1
+    type: int
+    restore_value: false
+    initial_value: "30"
+  - id: timer_draft_2
+    type: int
+    restore_value: false
+    initial_value: "30"
+  - id: timer_draft_3
+    type: int
+    restore_value: false
+    initial_value: "20"
+  - id: timer_draft_4
+    type: int
+    restore_value: false
+    initial_value: "20"
+  - id: timer_draft_5
+    type: int
+    restore_value: false
+    initial_value: "20"
+  - id: timer_draft_6
+    type: int
+    restore_value: false
+    initial_value: "30"
+  - id: timer_draft_7
+    type: int
+    restore_value: false
+    initial_value: "20"
+  - id: settings_brightness_draft
+    type: int
+    restore_value: false
+    initial_value: "70"
+  - id: settings_sleep_draft
+    type: int
+    restore_value: false
+    initial_value: "4"
+  - id: settings_wake_touch_draft
+    type: bool
+    restore_value: false
+    initial_value: "true"
+  - id: settings_auto_home_draft
+    type: int
+    restore_value: false
+    initial_value: "3"
+  - id: settings_heat_temp_draft
+    type: int
+    restore_value: false
+    initial_value: "5"
+  - id: settings_buzzer_draft
+    type: bool
+    restore_value: false
+    initial_value: "true"
+
+# =============================================================================
+# Guition ESP32-S3-4848S040 顯示器與觸控
+time:
+  - platform: homeassistant
+    id: panel_time
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          const auto now = id(panel_time).now();
+          if (now.is_valid()) {
+            char time_text[8];
+            snprintf(time_text, sizeof(time_text), "%02d:%02d", now.hour, now.minute);
+            lv_label_set_text(id(panel_clock_label), time_text);
+          } else {
+            lv_label_set_text(id(panel_clock_label), "--:--");
+          }
+
+  # 倒數中冒號每秒閃爍，表示正在倒數；無倒數值時冒號固定顯示。
+  - interval: 1s
+    then:
+      - lambda: id(countdown_colon_on) = !id(countdown_colon_on);
+      - script.execute: refresh_countdown_label
+
+  # 面板休眠與設定頁自動返回。倒數一律由最後一次實際觸控開始計算。
+  - interval: 1s
+    then:
+      - lambda: |-
+          static const uint32_t SLEEP_SECONDS[] = {0, 30, 60, 180, 300, 600, 1800};
+          static const uint32_t HOME_SECONDS[] = {0, 30, 60, 180, 300};
+          const int sleep_index = std::max(0, std::min(6, id(panel_sleep_index)));
+          const int home_index = std::max(0, std::min(4, id(panel_auto_home_index)));
+          const uint32_t idle_ms = millis() - id(panel_last_touch_ms);
+
+          if (id(panel_screen_awake) && SLEEP_SECONDS[sleep_index] > 0 &&
+              idle_ms >= SLEEP_SECONDS[sleep_index] * 1000UL) {
+            id(sleep_panel_screen).execute();
+          }
+
+          if (id(settings_is_open) && HOME_SECONDS[home_index] > 0 &&
+              idle_ms >= HOME_SECONDS[home_index] * 1000UL &&
+              lv_obj_has_flag(id(settings_save_modal), LV_OBJ_FLAG_HIDDEN)) {
+            id(panel_last_touch_ms) = millis();
+            if (id(settings_dirty))
+              lv_obj_clear_flag(id(settings_save_modal), LV_OBJ_FLAG_HIDDEN);
+            else
+              id(close_settings_page).execute();
+          }
+
+          // 主頁彈窗（濾網／網路）閒置同樣自動關閉；濾網提醒時數有改才先問是否儲存。
+          if (id(home_popup_open) && HOME_SECONDS[home_index] > 0 &&
+              idle_ms >= HOME_SECONDS[home_index] * 1000UL &&
+              lv_obj_has_flag(id(filter_save_modal), LV_OBJ_FLAG_HIDDEN)) {
+            id(panel_last_touch_ms) = millis();
+            if (id(filter_popup_dirty))
+              lv_obj_clear_flag(id(filter_save_modal), LV_OBJ_FLAG_HIDDEN);
+            else
+              id(close_home_popups).execute();
+          }
+
+  # WiFi 掃描清單每 2 秒更新（僅頁面開啟時）。
+  - interval: 2s
+    then:
+      - if:
+          condition:
+            lambda: return !lv_obj_has_flag(id(wifi_setup_page), LV_OBJ_FLAG_HIDDEN);
+          then:
+            - script.execute: refresh_wifi_setup_list
+
+  # 連線圖示規則：Wi-Fi 或 HA 任一未連線為紅色，兩者正常才是白色；不閃爍。
+  - interval: 1s
+    then:
+      - lambda: |-
+          const bool wifi_ok = wifi::global_wifi_component != nullptr &&
+                               wifi::global_wifi_component->is_connected();
+          const bool ha_ok = api::global_api_server != nullptr &&
+                             api::global_api_server->is_connected();
+
+          lv_obj_set_style_text_color(
+              id(wifi_status_icon),
+              lv_color_hex(wifi_ok && ha_ok ? 0xFFFFFF : 0xFF3030),
+              LV_PART_MAIN);
+          lv_obj_clear_flag(id(wifi_status_icon), LV_OBJ_FLAG_HIDDEN);
+          if (!lv_obj_has_flag(id(wifi_popup), LV_OBJ_FLAG_HIDDEN))
+            id(refresh_home_popups).execute();
+
+          lv_obj_set_style_text_color(
+              id(vent24_status_icon),
+              lv_color_hex(id(bath_heat_vent24).state ? 0x8EEA45 : 0xA0A0A0),
+              LV_PART_MAIN);
+          lv_obj_set_style_bg_color(
+              id(vent24_status_button),
+              lv_color_hex(id(bath_heat_vent24).state ? 0x203A18 : 0x1A1A1A),
+              LV_PART_MAIN);
+          lv_obj_set_style_border_color(
+              id(vent24_status_button),
+              lv_color_hex(id(bath_heat_vent24).state ? 0x6EC13A : 0x555555),
+              LV_PART_MAIN);
+          lv_obj_set_style_text_color(
+              id(filter_status_icon),
+              lv_color_hex(id(bath_heat_filter_due).state ? 0xFF3838 : 0xA0A0A0),
+              LV_PART_MAIN);
+          lv_obj_set_style_bg_color(
+              id(filter_status_button),
+              lv_color_hex(id(bath_heat_filter_due).state ? 0x401818 : 0x1A1A1A),
+              LV_PART_MAIN);
+          lv_obj_set_style_border_color(
+              id(filter_status_button),
+              lv_color_hex(id(bath_heat_filter_due).state ? 0xD93636 : 0x555555),
+              LV_PART_MAIN);
+
+# =============================================================================

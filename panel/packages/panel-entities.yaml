@@ -1,0 +1,39 @@
+# =============================================================================
+# 暖風機原生 entities + 面板顯示用 entities
+
+button:
+  - platform: restart
+    id: panel_restart
+    name: "Restart 重開機"
+
+  - platform: factory_reset
+    name: "Factory Reset 恢復出廠"
+    internal: true
+
+sensor:
+  - platform: wifi_signal
+    id: panel_wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+
+  - platform: internal_temperature
+    name: "ESP32 Temperature"
+
+  - platform: uptime
+    id: panel_uptime_hours
+    name: "Uptime 開機時間"
+    filters:
+      - lambda: return x / 3600;
+    unit_of_measurement: "h"
+    accuracy_decimals: 1
+
+text_sensor:
+  - platform: version
+    id: panel_esphome_version
+    name: "ESPHome Version"
+    hide_timestamp: true
+
+  - platform: wifi_info
+    ip_address:
+      id: panel_ip_address
+      name: "IP Address"

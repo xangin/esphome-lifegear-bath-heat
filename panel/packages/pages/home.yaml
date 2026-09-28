@@ -1,0 +1,21 @@
+id: main_page
+bg_color: 0x050505
+bg_opa: COVER
+scrollbar_mode: "OFF"
+scrollable: false
+widgets:
+  - !include home-status-bar.yaml
+  - !include home-modes.yaml
+  - !include home-vent24-hint.yaml
+  # 主頁彈窗（放在主頁而非 top_layer）。越後面越上層。
+  - !include home-filter-popup.yaml
+  - !include home-wifi-popup.yaml
+  - !include home-wifi-setup.yaml
+  - !include home-wifi-reset-confirm.yaml
+  - !include home-filter-reset-confirm.yaml
+  - !include
+      file: settings-confirm-dialog.yaml
+      vars:
+        modal_id: filter_save_modal
+        save_script: filter_popup_save_and_close
+        discard_script: filter_popup_discard_and_close

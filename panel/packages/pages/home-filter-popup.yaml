@@ -1,0 +1,156 @@
+# 濾網彈窗：累計運轉時數、提醒時數選擇、重置與關閉
+obj:
+  id: filter_popup
+  x: 0
+  y: 0
+  width: 480
+  height: 480
+  bg_color: 0x000000
+  bg_opa: 80%
+  clickable: true
+  scrollable: false
+  hidden: true
+  widgets:
+    - obj:
+        x: 32
+        y: 111
+        width: 416
+        height: 258
+        radius: 14
+        bg_color: 0x111111
+        bg_opa: COVER
+        border_color: 0x8A8A8A
+        border_width: 2
+        widgets:
+          - label:
+              x: 28
+              y: 22
+              width: 360
+              height: 36
+              text: "濾網"
+              text_font: settings_zh_24
+              text_align: CENTER
+          - obj:
+              x: 14
+              y: 64
+              width: 388
+              height: 1
+              bg_color: 0x454545
+              bg_opa: COVER
+
+          - label:
+              x: 28
+              y: 76
+              width: 160
+              height: 30
+              text: "累計運轉"
+              text_font: settings_zh_20
+          - label:
+              id: filter_popup_hours
+              x: 200
+              y: 78
+              width: 120
+              height: 30
+              text: "--"
+              text_font: settings_en_20
+              text_align: RIGHT
+          - label:
+              x: 328
+              y: 76
+              width: 60
+              height: 28
+              text: "小時"
+              text_font: settings_zh_20
+
+          - label:
+              x: 28
+              y: 128
+              width: 150
+              height: 30
+              text: "提醒時數"
+              text_font: settings_zh_20
+          - button:
+              x: 176
+              y: 120
+              width: 48
+              height: 44
+              radius: 8
+              bg_color: 0x222222
+              border_width: 1
+              on_click:
+                - script.execute:
+                    id: adjust_filter_threshold_draft
+                    delta: -1
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "\U000F0731"
+                    text_font: settings_mdi_34
+          - label:
+              id: filter_popup_threshold
+              x: 230
+              y: 130
+              width: 70
+              height: 30
+              text: "720"
+              text_font: settings_en_20
+              text_align: RIGHT
+          - label:
+              x: 306
+              y: 128
+              width: 50
+              height: 28
+              text: "小時"
+              text_font: settings_zh_20
+          - button:
+              x: 354
+              y: 120
+              width: 48
+              height: 44
+              radius: 8
+              bg_color: 0x222222
+              border_width: 1
+              on_click:
+                - script.execute:
+                    id: adjust_filter_threshold_draft
+                    delta: 1
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "\U000F0734"
+                    text_font: settings_mdi_34
+
+          - button:
+              id: filter_popup_reset_button
+              x: 14
+              y: 186
+              width: 150
+              height: 54
+              radius: 10
+              bg_color: 0x342020
+              border_color: 0xB84A4A
+              border_width: 1
+              on_click:
+                - lvgl.widget.show: filter_reset_confirm
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "重置"
+                    text_font: settings_zh_20
+          - button:
+              id: filter_popup_close_button
+              x: 250
+              y: 186
+              width: 152
+              height: 54
+              radius: 10
+              bg_color: 0x292929
+              border_color: 0x777777
+              border_width: 1
+              on_click:
+                - script.execute: request_filter_popup_close
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "關閉"
+                    text_font: settings_zh_20

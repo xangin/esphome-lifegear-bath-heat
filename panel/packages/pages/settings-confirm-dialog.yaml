@@ -1,0 +1,92 @@
+# 共用「是否要儲存變更」對話框。以 !include vars 帶入：
+#   modal_id / save_script / discard_script
+obj:
+  id: ${modal_id}
+  x: 0
+  y: 0
+  width: 480
+  height: 480
+  bg_color: 0x000000
+  bg_opa: 80%
+  clickable: true
+  scrollable: false
+  hidden: true
+  widgets:
+    - obj:
+        x: 32
+        y: 116
+        width: 416
+        height: 238
+        radius: 14
+        bg_color: 0x111111
+        bg_opa: COVER
+        border_color: 0x8A8A8A
+        border_width: 2
+        widgets:
+          - label:
+              x: 28
+              y: 26
+              width: 360
+              height: 36
+              text: "是否要儲存變更"
+              text_font: settings_zh_24
+              text_align: CENTER
+          - label:
+              x: 28
+              y: 76
+              width: 360
+              height: 28
+              text: "設定尚未儲存"
+              text_font: settings_zh_20
+              text_color: 0xBEBEBE
+              text_align: CENTER
+          - button:
+              x: 14
+              y: 148
+              width: 166
+              height: 58
+              radius: 10
+              bg_color: 0xE8E8E8
+              border_color: 0xFFFFFF
+              border_width: 1
+              on_click:
+                - script.execute: ${save_script}
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "儲存並返回"
+                    text_font: settings_zh_20
+                    text_color: 0x000000
+          - button:
+              id: ${modal_id}_discard
+              x: 188
+              y: 148
+              width: 118
+              height: 58
+              radius: 10
+              bg_color: 0x292929
+              border_color: 0x777777
+              border_width: 1
+              on_click:
+                - script.execute: ${discard_script}
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "不儲存"
+                    text_font: settings_zh_20
+          - button:
+              x: 314
+              y: 148
+              width: 88
+              height: 58
+              radius: 10
+              bg_color: 0x292929
+              border_color: 0x777777
+              border_width: 1
+              on_click:
+                - lvgl.widget.hide: ${modal_id}
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "取消"
+                    text_font: settings_zh_20

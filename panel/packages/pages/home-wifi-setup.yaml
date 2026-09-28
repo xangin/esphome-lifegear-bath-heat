@@ -1,0 +1,398 @@
+# 面板上直接選 WiFi：掃描清單頁（wifi_setup_page）與密碼輸入頁（wifi_pw_page）
+obj:
+  id: wifi_setup_layer
+  x: 0
+  y: 0
+  width: 480
+  height: 480
+  bg_opa: TRANSP
+  border_width: 0
+  pad_all: 0
+  clickable: false
+  scrollable: false
+  widgets:
+    - obj:
+        id: wifi_setup_page
+        x: 0
+        y: 0
+        width: 480
+        height: 480
+        bg_color: 0x050505
+        bg_opa: COVER
+        clickable: true
+        scrollable: false
+        hidden: true
+        widgets:
+          - button:
+              id: wifi_setup_back_button
+              x: 8
+              y: 8
+              width: 116
+              height: 50
+              radius: 10
+              bg_color: 0x171717
+              border_color: 0x555555
+              border_width: 1
+              shadow_opa: TRANSP
+              pad_all: 0
+              on_click:
+                - script.execute: close_home_popups
+              widgets:
+                - label:
+                    x: 8
+                    y: 8
+                    width: 34
+                    height: 34
+                    text: "\U000F0731"
+                    text_font: settings_mdi_34
+                    text_align: CENTER
+                - label:
+                    x: 40
+                    y: 14
+                    width: 64
+                    height: 30
+                    text: "返回"
+                    text_font: settings_zh_20
+                    text_align: CENTER
+          - label:
+              x: 150
+              y: 20
+              width: 160
+              height: 34
+              text: "選擇網路"
+              text_font: settings_zh_24
+              text_align: CENTER
+          - button:
+              id: wifi_rescan_button
+              x: 330
+              y: 8
+              width: 142
+              height: 50
+              radius: 10
+              bg_color: 0x171717
+              border_color: 0x555555
+              border_width: 1
+              shadow_opa: TRANSP
+              on_click:
+                - lambda: |-
+                    auto *wc = wifi::global_wifi_component;
+                    if (wc == nullptr) return;
+                    if (wc->is_connected()) {
+                      // 已連線: disable/enable 重啟連線流程, esphome 自己會先做一次
+                      // 完整掃描 (清單每 2 秒撿 get_scan_result), 之後自動連回原網路。
+                      // 不可在 enable() 後立刻 start_scanning(): radio 未就緒會失敗
+                      // 並卡 30 秒 timeout (26.09.13 踩過)。
+                      wc->disable();
+                      wc->enable();
+                    } else {
+                      wc->start_scanning();
+                    }
+                    lv_label_set_text(id(wifi_setup_status), "掃描中");
+                - script.execute: refresh_wifi_setup_list
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "重新掃描"
+                    text_font: settings_zh_20
+          - label:
+              id: wifi_setup_status
+              x: 16
+              y: 66
+              width: 448
+              height: 28
+              text: "掃描中"
+              text_font: settings_zh_16
+              text_color: 0xBEBEBE
+          - button:
+              id: wifi_row_0
+              x: 8
+              y: 96
+              width: 464
+              height: 56
+              radius: 10
+              bg_color: 0x171717
+              border_color: 0x555555
+              border_width: 1
+              shadow_opa: TRANSP
+              hidden: true
+              on_click:
+                - lambda: id(wifi_setup_selected_ssid) = lv_label_get_text(id(wifi_row_ssid_0));
+                - script.execute: open_wifi_pw_page
+              widgets:
+                - label:
+                    id: wifi_row_ssid_0
+                    x: 11
+                    y: 12
+                    width: 330
+                    height: 30
+                    text: "-"
+                    text_font: settings_en_20
+                - label:
+                    id: wifi_row_qual_0
+                    x: 355
+                    y: 11
+                    width: 88
+                    height: 30
+                    text: ""
+                    text_font: wifi_qual_zh_20
+                    text_align: RIGHT
+          - button:
+              id: wifi_row_1
+              x: 8
+              y: 158
+              width: 464
+              height: 56
+              radius: 10
+              bg_color: 0x171717
+              border_color: 0x555555
+              border_width: 1
+              shadow_opa: TRANSP
+              hidden: true
+              on_click:
+                - lambda: id(wifi_setup_selected_ssid) = lv_label_get_text(id(wifi_row_ssid_1));
+                - script.execute: open_wifi_pw_page
+              widgets:
+                - label:
+                    id: wifi_row_ssid_1
+                    x: 11
+                    y: 12
+                    width: 330
+                    height: 30
+                    text: "-"
+                    text_font: settings_en_20
+                - label:
+                    id: wifi_row_qual_1
+                    x: 355
+                    y: 11
+                    width: 88
+                    height: 30
+                    text: ""
+                    text_font: wifi_qual_zh_20
+                    text_align: RIGHT
+          - button:
+              id: wifi_row_2
+              x: 8
+              y: 220
+              width: 464
+              height: 56
+              radius: 10
+              bg_color: 0x171717
+              border_color: 0x555555
+              border_width: 1
+              shadow_opa: TRANSP
+              hidden: true
+              on_click:
+                - lambda: id(wifi_setup_selected_ssid) = lv_label_get_text(id(wifi_row_ssid_2));
+                - script.execute: open_wifi_pw_page
+              widgets:
+                - label:
+                    id: wifi_row_ssid_2
+                    x: 11
+                    y: 12
+                    width: 330
+                    height: 30
+                    text: "-"
+                    text_font: settings_en_20
+                - label:
+                    id: wifi_row_qual_2
+                    x: 355
+                    y: 11
+                    width: 88
+                    height: 30
+                    text: ""
+                    text_font: wifi_qual_zh_20
+                    text_align: RIGHT
+          - button:
+              id: wifi_row_3
+              x: 8
+              y: 282
+              width: 464
+              height: 56
+              radius: 10
+              bg_color: 0x171717
+              border_color: 0x555555
+              border_width: 1
+              shadow_opa: TRANSP
+              hidden: true
+              on_click:
+                - lambda: id(wifi_setup_selected_ssid) = lv_label_get_text(id(wifi_row_ssid_3));
+                - script.execute: open_wifi_pw_page
+              widgets:
+                - label:
+                    id: wifi_row_ssid_3
+                    x: 11
+                    y: 12
+                    width: 330
+                    height: 30
+                    text: "-"
+                    text_font: settings_en_20
+                - label:
+                    id: wifi_row_qual_3
+                    x: 355
+                    y: 11
+                    width: 88
+                    height: 30
+                    text: ""
+                    text_font: wifi_qual_zh_20
+                    text_align: RIGHT
+          - button:
+              id: wifi_row_4
+              x: 8
+              y: 344
+              width: 464
+              height: 56
+              radius: 10
+              bg_color: 0x171717
+              border_color: 0x555555
+              border_width: 1
+              shadow_opa: TRANSP
+              hidden: true
+              on_click:
+                - lambda: id(wifi_setup_selected_ssid) = lv_label_get_text(id(wifi_row_ssid_4));
+                - script.execute: open_wifi_pw_page
+              widgets:
+                - label:
+                    id: wifi_row_ssid_4
+                    x: 11
+                    y: 12
+                    width: 330
+                    height: 30
+                    text: "-"
+                    text_font: settings_en_20
+                - label:
+                    id: wifi_row_qual_4
+                    x: 355
+                    y: 11
+                    width: 88
+                    height: 30
+                    text: ""
+                    text_font: wifi_qual_zh_20
+                    text_align: RIGHT
+          - button:
+              id: wifi_row_5
+              x: 8
+              y: 406
+              width: 464
+              height: 56
+              radius: 10
+              bg_color: 0x171717
+              border_color: 0x555555
+              border_width: 1
+              shadow_opa: TRANSP
+              hidden: true
+              on_click:
+                - lambda: id(wifi_setup_selected_ssid) = lv_label_get_text(id(wifi_row_ssid_5));
+                - script.execute: open_wifi_pw_page
+              widgets:
+                - label:
+                    id: wifi_row_ssid_5
+                    x: 11
+                    y: 12
+                    width: 330
+                    height: 30
+                    text: "-"
+                    text_font: settings_en_20
+                - label:
+                    id: wifi_row_qual_5
+                    x: 355
+                    y: 11
+                    width: 88
+                    height: 30
+                    text: ""
+                    text_font: wifi_qual_zh_20
+                    text_align: RIGHT
+
+    - obj:
+        id: wifi_pw_page
+        x: 0
+        y: 0
+        width: 480
+        height: 480
+        bg_color: 0x050505
+        bg_opa: COVER
+        clickable: true
+        scrollable: false
+        hidden: true
+        widgets:
+          - label:
+              x: 16
+              y: 16
+              width: 150
+              height: 34
+              text: "輸入密碼"
+              text_font: settings_zh_24
+          - label:
+              id: wifi_pw_ssid
+              x: 180
+              y: 22
+              width: 284
+              height: 28
+              text: "-"
+              text_font: settings_en_16
+              text_align: RIGHT
+          - textarea:
+              id: wifi_pw_input
+              x: 16
+              y: 56
+              width: 448
+              height: 48
+              one_line: true
+              max_length: 64
+              text_font: settings_en_20
+              bg_color: 0x171717
+              text_color: 0xFFFFFF
+              border_color: 0x777777
+              border_width: 1
+          - label:
+              id: wifi_pw_status
+              x: 16
+              y: 120
+              width: 220
+              height: 30
+              text: ""
+              text_font: settings_zh_20
+              text_color: 0xFFD060
+          - button:
+              id: wifi_pw_cancel_button
+              x: 248
+              y: 112
+              width: 104
+              height: 48
+              radius: 10
+              bg_color: 0x292929
+              border_color: 0x777777
+              border_width: 1
+              shadow_opa: TRANSP
+              on_click:
+                - lvgl.widget.hide: wifi_pw_page
+                - lvgl.widget.show: wifi_setup_page
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "取消"
+                    text_font: settings_zh_20
+          - button:
+              x: 364
+              y: 112
+              width: 100
+              height: 48
+              radius: 10
+              bg_color: 0xE8E8E8
+              border_color: 0xFFFFFF
+              border_width: 1
+              shadow_opa: TRANSP
+              on_click:
+                - script.execute: wifi_connect_start
+              widgets:
+                - label:
+                    align: CENTER
+                    text: "連線"
+                    text_font: settings_zh_20
+                    text_color: 0x000000
+          - keyboard:
+              id: wifi_keyboard
+              align: BOTTOM_MID
+              width: 480
+              height: 300
+              textarea: wifi_pw_input
+              mode: TEXT_LOWER

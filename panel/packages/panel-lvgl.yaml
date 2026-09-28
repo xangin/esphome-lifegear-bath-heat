@@ -1,0 +1,32 @@
+# LVGL 共用主題與頁面載入
+
+lvgl:
+  displays:
+    - tft_display
+  touchscreens:
+    - tft_touch
+  # 喚醒由 wake_panel_screen 統一處理；禁止 LVGL 在觸控一開始自行恢復，
+  # 否則 HA 關閉背光後第一下觸控仍可能穿透到頁面按鈕。
+  resume_on_input: false
+  # Guition S3 有 PSRAM；完整畫面緩衝可減少分段 flush，設定頁切換更流暢。
+  buffer_size: 100%
+  bg_color: 0x050505
+  theme:
+    obj:
+      border_width: 0
+      outline_width: 0
+      bg_opa: TRANSP
+      pad_all: 0
+      scrollbar_mode: "OFF"
+    label:
+      text_color: 0xFFFFFF
+      bg_opa: TRANSP
+    button:
+      bg_color: 0x202020
+      border_color: 0x777777
+      border_width: 3
+      outline_width: 0
+
+  pages:
+    - !include pages/home.yaml
+    - !include pages/settings-shell.yaml

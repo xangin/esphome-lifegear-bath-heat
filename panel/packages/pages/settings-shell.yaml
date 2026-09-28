@@ -1,0 +1,128 @@
+id: settings_page
+bg_color: 0x050505
+bg_opa: COVER
+scrollbar_mode: "OFF"
+scrollable: false
+widgets:
+  - obj:
+      id: settings_top_bar
+      x: 8
+      y: 8
+      width: 464
+      height: 64
+      radius: 12
+      bg_color: 0x20242C
+      bg_grad_color: 0x050607
+      bg_grad_dir: VER
+      bg_opa: COVER
+      border_color: 0x686868
+      border_width: 1
+      pad_all: 0
+      scrollable: false
+      widgets:
+        - button:
+            id: settings_back_button
+            x: 8
+            y: 7
+            width: 116
+            height: 50
+            radius: 10
+            bg_color: 0x171717
+            border_color: 0x555555
+            border_width: 1
+            shadow_opa: TRANSP
+            pad_all: 0
+            on_click:
+              - script.execute: request_settings_exit
+            widgets:
+              - label:
+                  x: 8
+                  y: 8
+                  width: 34
+                  height: 34
+                  text: "\U000F0731"
+                  text_font: settings_mdi_34
+                  text_color: 0xFFFFFF
+                  text_align: CENTER
+              - label:
+                  x: 40
+                  y: 14
+                  width: 64
+                  height: 30
+                  text: "返回"
+                  text_font: settings_zh_20
+                  text_color: 0xFFFFFF
+                  text_align: CENTER
+  - !include settings-timer.yaml
+  - !include settings-general.yaml
+  - !include settings-info.yaml
+  - button:
+      id: settings_tab_timer
+      x: 8
+      y: 422
+      width: 148
+      height: 50
+      radius: 10
+      bg_color: 0xFFFFFF
+      bg_grad_color: 0xD0D0D0
+      bg_grad_dir: VER
+      border_color: 0x777777
+      border_width: 1
+      shadow_opa: TRANSP
+      on_click:
+        - lambda: id(settings_active_tab) = 0;
+        - script.execute: refresh_settings_ui
+      widgets:
+        - label:
+            align: CENTER
+            text: "定時"
+            text_font: settings_zh_20
+            text_color: 0x000000
+  - button:
+      id: settings_tab_general
+      x: 166
+      y: 422
+      width: 148
+      height: 50
+      radius: 10
+      bg_color: 0x20242C
+      bg_grad_color: 0x050607
+      bg_grad_dir: VER
+      border_color: 0x555555
+      border_width: 1
+      shadow_opa: TRANSP
+      on_click:
+        - lambda: id(settings_active_tab) = 1;
+        - script.execute: refresh_settings_ui
+      widgets:
+        - label:
+            align: CENTER
+            text: "設定"
+            text_font: settings_zh_20
+  - button:
+      id: settings_tab_info
+      x: 324
+      y: 422
+      width: 148
+      height: 50
+      radius: 10
+      bg_color: 0x20242C
+      bg_grad_color: 0x050607
+      bg_grad_dir: VER
+      border_color: 0x555555
+      border_width: 1
+      shadow_opa: TRANSP
+      on_click:
+        - lambda: id(settings_active_tab) = 2;
+        - script.execute: refresh_settings_ui
+      widgets:
+        - label:
+            align: CENTER
+            text: "資訊"
+            text_font: settings_zh_20
+  - !include
+      file: settings-confirm-dialog.yaml
+      vars:
+        modal_id: settings_save_modal
+        save_script: save_settings_and_exit
+        discard_script: discard_settings_and_exit

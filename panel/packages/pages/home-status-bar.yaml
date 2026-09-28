@@ -1,0 +1,159 @@
+obj:
+  id: top_status_bar
+  x: 8
+  y: 8
+  width: 464
+  height: 72
+  radius: 10
+  bg_color: 0x20242C
+  bg_grad_color: 0x050607
+  bg_grad_dir: VER
+  bg_opa: COVER
+  border_color: 0x686868
+  border_width: 1
+  pad_all: 0
+  scrollable: false
+  widgets:
+    # 左側為 24h 與濾網；中央只顯示時鐘。
+    - label:
+        id: panel_clock_label
+        x: 162
+        y: 20
+        width: 140
+        height: 48
+        text: "--:--"
+        text_font: panel_digits_36
+        text_color: 0xFFFFFF
+        text_align: CENTER
+        clickable: false
+        scrollable: false
+
+    - button:
+        id: vent24_status_button
+        x: 16
+        y: 10
+        width: 52
+        height: 52
+        radius: 10
+        bg_color: 0x1A1A1A
+        border_color: 0x555555
+        border_width: 1
+        shadow_opa: TRANSP
+        pad_all: 0
+        clickable: true
+        scrollable: false
+        # 長按 2 秒才切換, 避免誤觸 (按下啟動計時, 提前放開取消)
+        on_press:
+          - script.execute: vent24_hold_toggle
+        on_release:
+          - if:
+              condition:
+                script.is_running: vent24_hold_toggle
+              then:
+                - script.stop: vent24_hold_toggle
+                - script.execute: vent24_hint_show
+        widgets:
+          - label:
+              id: vent24_status_icon
+              align: CENTER
+              y: 2
+              width: 44
+              height: 40
+              text: "\U000F1478"
+              text_font: panel_mdi_34
+              text_color: 0x777777
+              text_align: CENTER
+              clickable: false
+              scrollable: false
+
+    - button:
+        id: filter_status_button
+        x: 76
+        y: 10
+        width: 52
+        height: 52
+        radius: 10
+        bg_color: 0x1A1A1A
+        border_color: 0x555555
+        border_width: 1
+        shadow_opa: TRANSP
+        pad_all: 0
+        clickable: true
+        scrollable: false
+        on_click:
+          - script.execute: open_filter_popup
+        widgets:
+          - label:
+              id: filter_status_icon
+              align: CENTER
+              y: 2
+              width: 44
+              height: 40
+              text: "\U000F0D43"
+              text_font: panel_mdi_34
+              text_color: 0x777777
+              text_align: CENTER
+              clickable: false
+              scrollable: false
+
+    # Wi-Fi 位於設定左側；失聯為紅色，連線正常為白色。按下開啟網路資訊彈窗。
+    - button:
+        id: wifi_status_button
+        x: 334
+        y: 10
+        width: 52
+        height: 52
+        radius: 10
+        bg_color: 0x1A1A1A
+        border_color: 0x555555
+        border_width: 1
+        shadow_opa: TRANSP
+        pad_all: 0
+        clickable: true
+        scrollable: false
+        on_click:
+          - script.execute: open_wifi_popup
+        widgets:
+          - label:
+              id: wifi_status_icon
+              align: CENTER
+              y: 2
+              width: 44
+              height: 40
+              text: "\U000F08BE"
+              text_font: panel_mdi_34
+              text_color: 0xFF3030
+              text_align: CENTER
+              clickable: false
+              scrollable: false
+
+    # 進入全 LVGL 設定頁。
+    - button:
+        id: settings_status_button
+        x: 392
+        y: 10
+        width: 52
+        height: 52
+        radius: 10
+        bg_color: 0x1A1A1A
+        border_color: 0x555555
+        border_width: 1
+        shadow_opa: TRANSP
+        pad_all: 0
+        clickable: true
+        scrollable: false
+        on_click:
+          - script.execute: open_settings_page
+        widgets:
+          - label:
+              id: settings_status_icon
+              align: CENTER
+              y: 2
+              width: 44
+              height: 40
+              text: "\U000F0493"
+              text_font: panel_mdi_34
+              text_color: 0xFFFFFF
+              text_align: CENTER
+              clickable: false
+              scrollable: false

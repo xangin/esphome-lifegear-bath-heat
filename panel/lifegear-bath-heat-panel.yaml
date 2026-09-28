@@ -1,0 +1,273 @@
+# =============================================================================
+# Lifegear 樂奇浴室暖風機 — Guition ESP32-S3-4848S040 觸控面板
+# https://github.com/xangin/esphome-lifegear-bath-heat
+# ----------------------------------------------------------------------------
+# 取代原廠面板，面板背面 relay 排針直接接暖風機排線：
+#   relay2 GPIO2 (TX) ──→ 排線 TX（暖風機 RX）
+#   relay3 GPIO1 (RX) ←── 排線 RX（暖風機 TX，RMT 擷取）
+#   GND 共地
+#
+# 480x480 LVGL 主頁與三分頁設定介面。出廠不含 Wi-Fi 設定，
+# 可在面板上直接選網路，或用手機連熱點設定；沒有網路也能完整操作。
+# 本資料夾整個複製即可編譯，不需要 secrets。
+# =============================================================================
+
+substitutions:
+  SW_VER: "2026.09.15-hold24b"
+  LAST_UPDATE: "26.09.13"
+  devicename: lg-bath-pannel
+  friendly_name: "Lifegear 浴室暖風機觸控面板"
+
+esphome:
+  name: ${devicename}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: true
+  comment: "SimonIoT Lifegear 浴室暖風機觸控面板"
+  project:
+    name: "SimonIoT.LifegearBathHeat-Panel"
+    version: ${LAST_UPDATE}
+
+esp32:
+  variant: esp32s3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+external_components:
+  - source: github://xangin/esphome-lifegear-bath-heat@main
+    components: [lifegear_bath_heat]
+    refresh: 1d
+
+wifi:
+  # 出廠不內建任何 WiFi 資料：開機直接開熱點（captive portal）供使用者初始設定。
+  # reboot_timeout 0 = 沒連上 WiFi 也不重開機，面板離線一樣可以操作暖風機。
+  reboot_timeout: 0s
+  ap:
+    # ssid 留空 → 以裝置名稱（含 MAC 後綴）當熱點名稱；密碼同步顯示在網路彈窗。
+    password: "12345678"
+
+captive_portal:
+
+logger:
+  level: INFO
+  baud_rate: 115200
+
+api:
+  reboot_timeout: 0s # 沒有 HA 也不重開機
+
+# =============================================================================
+# 暖風機協定與原生 entities
+# =============================================================================
+lifegear_bath_heat:
+  id: bath_heat
+  display_language: zh-TW
+  machine_tx_pin: 2
+  rmt_rx_pin: 1
+  timer_defaults:
+    heat_bath: 30
+    heat_temp: 20
+    cool_high: 20
+    cool_low: 20
+    vent_high: 30
+    vent_low: 20
+    dry_eco: 60
+    dry_fast: 30
+
+# 暖風機原生控制實體；面板專用 entities 在 packages/。
+select:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    mode:
+      id: bath_heat_mode
+      name: "Mode 模式"
+      icon: mdi:hvac
+    heat_temperature:
+      id: bath_heat_temperature
+      name: "Heat Temp 溫控溫度"
+      icon: mdi:thermometer
+    filter_threshold:
+      id: bath_heat_filter_threshold
+      name: "Filter Limit 濾網時數"
+      icon: mdi:air-filter
+      entity_category: config
+
+number:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    heat_bath_timer:
+      id: heat_bath_timer
+      name: "Bath Timer 沐浴定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    heat_temp_timer:
+      id: heat_temp_timer
+      name: "Heat Timer 溫控定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    cool_high_timer:
+      id: cool_high_timer
+      name: "Cool Hi Timer 涼風強定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    cool_low_timer:
+      id: cool_low_timer
+      name: "Cool Lo Timer 涼風弱定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    vent_high_timer:
+      id: vent_high_timer
+      name: "Vent Hi Timer 換氣強定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    vent_low_timer:
+      id: vent_low_timer
+      name: "Vent Lo Timer 換氣弱定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    dry_eco_timer:
+      id: dry_eco_timer
+      name: "Eco Dry Timer 節電乾燥定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    dry_fast_timer:
+      id: dry_fast_timer
+      name: "Fast Dry Timer 快速乾燥定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+
+switch:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    left_light:
+      id: bath_heat_left_light
+      name: "Left Light 左燈"
+      icon: mdi:lightbulb
+      restore_mode: ALWAYS_OFF
+    right_light:
+      id: bath_heat_right_light
+      name: "Right Light 右燈"
+      icon: mdi:lightbulb-outline
+      restore_mode: ALWAYS_OFF
+    buzzer:
+      id: bath_heat_buzzer
+      name: "Buzzer 蜂鳴"
+      icon: mdi:bell-ring
+      restore_mode: RESTORE_DEFAULT_ON
+    vent24:
+      id: bath_heat_vent24
+      name: "Vent24 24h換氣"
+      icon: mdi:hours-24
+      restore_mode: RESTORE_DEFAULT_ON
+
+button:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    "off":
+      id: bath_heat_off
+      name: "Off 關機"
+      icon: mdi:power
+    filter_reset:
+      id: bath_heat_filter_reset
+      name: "Filter Reset 濾網重設"
+      icon: mdi:air-filter
+      entity_category: config
+sensor:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    filter_hours:
+      id: bath_heat_filter_hours
+      name: "Filter Hours 濾網時數"
+      icon: mdi:air-filter
+    timer_left:
+      id: bath_heat_timer_left
+      name: "Timer Left 剩餘時間"
+      icon: mdi:timer-sand
+      on_value:
+        # 新剩餘時間到達 → 解除模式切換的 --:-- 遮罩
+        - lambda: id(countdown_wait_fresh) = false;
+        - script.execute: refresh_panel_ui
+text_sensor:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    current_mode:
+      id: bath_heat_current_mode
+      name: "Mode State 目前模式"
+      icon: mdi:information-outline
+      on_value:
+        - lambda: |-
+            int mode = -1;
+            if (x.rfind("暖房沐浴", 0) == 0) mode = 0;
+            else if (x.rfind("暖房溫控", 0) == 0) mode = 1;
+            else if (x.rfind("涼風強", 0) == 0) mode = 2;
+            else if (x.rfind("涼風弱", 0) == 0) mode = 3;
+            else if (x.rfind("換氣強", 0) == 0) mode = 4;
+            else if (x.rfind("換氣弱", 0) == 0) mode = 5;
+            else if (x.rfind("乾燥節電", 0) == 0) mode = 6;
+            else if (x.rfind("乾燥快速", 0) == 0) mode = 7;
+
+            id(active_normal_mode) = mode;
+            if (mode >= 0) {
+              id(last_normal_mode) = mode;
+              if (mode <= 1) id(last_heat_mode) = mode;
+              else if (mode <= 3) id(last_cool_mode) = mode;
+              else if (mode <= 5) id(last_vent_mode) = mode;
+              else id(last_dry_mode) = mode;
+            }
+            id(refresh_panel_ui).execute();
+    host_status:
+      id: bath_heat_host_status
+      name: "Host 主機回報"
+      icon: mdi:engine-outline
+    raw_state:
+      id: bath_heat_raw_state
+      name: "Raw State 原始狀態"
+      icon: mdi:code-braces
+      entity_category: diagnostic
+      disabled_by_default: true
+binary_sensor:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    override:
+      id: bath_heat_override
+      name: "Override 接管中"
+      icon: mdi:remote
+    filter_due:
+      id: bath_heat_filter_due
+      name: "Filter Due 濾網清潔"
+      icon: mdi:air-filter
+      device_class: problem
+    left_light_state:
+      id: bath_heat_left_light_state
+      name: "Left State 左燈狀態"
+      entity_category: diagnostic
+      disabled_by_default: true
+    right_light_state:
+      id: bath_heat_right_light_state
+      name: "Right State 右燈狀態"
+      entity_category: diagnostic
+      disabled_by_default: true
+
+  - platform: status
+    name: "Status 連線狀態"
+
+# =============================================================================
+# Guition 面板模組（固定放在主檔最下方）
+# =============================================================================
+packages:
+  panel_hardware: !include packages/panel-hardware.yaml
+  panel_entities: !include packages/panel-entities.yaml
+  panel_runtime: !include packages/panel-runtime.yaml
+  panel_scripts: !include packages/panel-scripts.yaml
+  panel_lvgl: !include packages/panel-lvgl.yaml
