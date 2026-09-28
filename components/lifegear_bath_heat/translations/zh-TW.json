@@ -1,0 +1,33 @@
+{
+  "language": "繁體中文",
+  "mode_options": [
+    "關機",
+    "暖房沐浴",
+    "暖房溫控",
+    "涼風強",
+    "涼風弱",
+    "換氣強",
+    "換氣中",
+    "換氣弱",
+    "乾燥節電",
+    "乾燥快速",
+    "24h 換氣"
+  ],
+  "states": {
+    "off": "關機",
+    "heat_bath": "暖房沐浴",
+    "heat_temp": "暖房溫控",
+    "cool_high": "涼風強",
+    "cool_low": "涼風弱",
+    "vent_high": "換氣強",
+    "vent_mid": "換氣中",
+    "vent_low": "換氣弱",
+    "dry_eco": "乾燥節電",
+    "dry_fast": "乾燥快速",
+    "vent24": "24h 換氣",
+    "waiting": "等待中",
+    "unknown": "未知",
+    "running": "運轉中",
+    "waiting_response": "等待回報"
+  }
+}

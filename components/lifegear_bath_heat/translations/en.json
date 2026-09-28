@@ -1,0 +1,33 @@
+{
+  "language": "English",
+  "mode_options": [
+    "Off",
+    "Bath Heating",
+    "Temperature Heating",
+    "Cool High",
+    "Cool Low",
+    "Vent High",
+    "Vent Mid",
+    "Vent Low",
+    "Eco Dry",
+    "Fast Dry",
+    "24h Ventilation"
+  ],
+  "states": {
+    "off": "Off",
+    "heat_bath": "Bath Heating",
+    "heat_temp": "Temperature Heating",
+    "cool_high": "Cool High",
+    "cool_low": "Cool Low",
+    "vent_high": "Vent High",
+    "vent_mid": "Vent Mid",
+    "vent_low": "Vent Low",
+    "dry_eco": "Eco Dry",
+    "dry_fast": "Fast Dry",
+    "vent24": "24h Ventilation",
+    "waiting": "Waiting",
+    "unknown": "Unknown",
+    "running": "Running",
+    "waiting_response": "Waiting for Response"
+  }
+}
