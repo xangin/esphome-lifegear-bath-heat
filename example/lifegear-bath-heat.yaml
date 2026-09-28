@@ -1,46 +1,35 @@
 # =============================================================================
-#  LIFEGEAR 樂奇浴室暖風機 lifegear-bath-heat — 取代面板版 (獨立模式, 無中繼)
+#  LIFEGEAR 樂奇浴室暖風機 lifegear-bath-heat — 取代原廠面板
 #  https://github.com/xangin/esphome-lifegear-bath-heat
 # -----------------------------------------------------------------------------
 #  接線 (原廠面板拆除, ESP 直連機器):
 #    ESP GPIO19 ──→ 排線「TX」(原面板送出端 → 機器 RX)  以 1Hz 持續送出狀態幀, ESP 即 master
-#    排線「RX」 ──→ ESP GPIO4  (機器 TX → 原面板接收端)  RMT 硬體擷取, 解機器 PPM 頁
+#    排線「RX」 ──→ ESP GPIO4  (機器 TX → 原面板接收端)  RMT 硬體擷取, 解機器回報
 #    GND 共地; ESP 請用獨立電源 (USB 5V)。
 #
-#  控制/顯示全部由 HA 進行; 開機預設送「關機」狀態。
+#  所有 Home Assistant 實體都由元件原生提供, 不需要任何 lambda;
+#  不要的實體直接刪掉那一段即可。開機預設送「關機」狀態。
 #  需要 wifi_ssid / wifi_password 兩個 secrets。
 # =============================================================================
 substitutions:
-  SW_VER: "2026.08.26"
-  LAST_UPDATE: "26.08.26"
+  LAST_UPDATE: "26.09.28"
   devicename: lifegear-bath-heat
   friendly_name: "Lifegear 浴室暖風機"
 
 esphome:
-  name: $devicename
+  name: ${devicename}
   friendly_name: ${friendly_name}
   name_add_mac_suffix: false
   comment: "SimonIoT Lifegear 浴室暖風機"
   project:
     name: "SimonIoT.LifegearBathHeat"
     version: ${LAST_UPDATE}
-  on_boot:
-    priority: -100
-    then:
-      - component.update: 'pj_version'
-      - component.update: 'sw_version'
-      - lambda: |-
-          // 斷電還原: 把 restore 後的設定推入元件 (元件在開機保護期只記狀態不動作)
-          id(erv)->set_vent24_enabled(id(sw_v24).state);
-          id(erv)->set_buzzer_enabled(id(sw_buzzer).state);
-          if (id(sel_filter).has_state()) id(erv)->set_filter_threshold_h(atoi(id(sel_filter).current_option()));
-          const float tv[8] = {id(tmr_hb).state, id(tmr_ht).state, id(tmr_ch).state, id(tmr_cl).state,
-                               id(tmr_vh).state, id(tmr_vl).state, id(tmr_de).state, id(tmr_df).state};
-          for (int i = 0; i < 8; i++)
-            if (!std::isnan(tv[i])) id(erv)->set_mode_timer(i, (int) tv[i]);
 
 esp32:
   board: esp32dev
+  # ESP32-C3 改用下面兩行; C3 的 GPIO18/19 是 USB, 腳位請改用例如 GPIO3 / GPIO4
+  # variant: esp32c3
+  # board: esp32-c3-devkitm-1
   framework:
     type: esp-idf
 
@@ -48,11 +37,6 @@ external_components:
   - source: github://xangin/esphome-lifegear-bath-heat@main
     components: [ lifegear_bath_heat ]
     refresh: 1d
-  # 本機開發時改用:
-  # - source:
-  #     type: local
-  #     path: ../components
-  #   components: [ lifegear_bath_heat ]
 
 wifi:
   reboot_timeout: 5min
@@ -74,264 +58,128 @@ api:
 ota:
   - platform: esphome
 
+# =============================================================================
+#  暖風機
+# =============================================================================
 lifegear_bath_heat:
-  id: erv
-  machine_tx_pin: 19    # → 機器 RX (1Hz 狀態幀)
-  rmt_rx_pin: 4         # ← 機器 TX (RMT 擷取)
+  id: bath_heat
+  machine_tx_pin: 19    # → 排線 TX (機器 RX)
+  rmt_rx_pin: 4         # ← 排線 RX (機器 TX)
+  display_language: zh-TW   # zh-TW 或 en: 模式與狀態字串語言
+  # 各模式預設定時 (分鐘, 5-720); 宣告了對應的 number 實體後以 HA 設定值為準
+  # timer_defaults:
+  #   heat_bath: 60
+  #   heat_temp: 60
+  #   cool_high: 60
+  #   cool_low: 60
+  #   vent_high: 60
+  #   vent_low: 180
+  #   dry_eco: 180
+  #   dry_fast: 60
+
+select:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    mode:
+      name: "Mode 模式"
+      icon: mdi:hvac
+    heat_temperature:
+      name: "Heat Temp 溫控溫度"
+      icon: mdi:thermometer
+    filter_threshold:
+      name: "Filter Limit 濾網時數"
+      icon: mdi:air-filter
+      entity_category: config
+
+number:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    heat_bath_timer:
+      name: "Bath Timer 沐浴定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    heat_temp_timer:
+      name: "Heat Timer 溫控定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    cool_high_timer:
+      name: "Cool Hi Timer 涼風強定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    cool_low_timer:
+      name: "Cool Lo Timer 涼風弱定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    vent_high_timer:
+      name: "Vent Hi Timer 換氣強定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    vent_low_timer:
+      name: "Vent Lo Timer 換氣弱定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    dry_eco_timer:
+      name: "Eco Dry Timer 節電乾燥定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+    dry_fast_timer:
+      name: "Fast Dry Timer 快速乾燥定時"
+      icon: mdi:timer-outline
+      entity_category: config
+      mode: box
+
+switch:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    left_light:
+      name: "Left Light 左燈"
+      icon: mdi:lightbulb
+      restore_mode: ALWAYS_OFF
+    right_light:
+      name: "Right Light 右燈"
+      icon: mdi:lightbulb-outline
+      restore_mode: ALWAYS_OFF
+    buzzer:
+      name: "Buzzer 蜂鳴"
+      icon: mdi:bell-ring
+      restore_mode: RESTORE_DEFAULT_ON
+    vent24:
+      name: "Vent24 24h換氣"
+      icon: mdi:hours-24
+      restore_mode: RESTORE_DEFAULT_OFF
 
 button:
-  - platform: template
-    name: "Off 關機"
-    icon: mdi:power
-    on_press:
-      - lambda: 'id(erv)->request_off();'   # 24h 設定開啟時自動改送 24h換氣
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    "off":
+      name: "Off 關機"
+      icon: mdi:power
+    filter_reset:
+      name: "Filter Reset 濾網重設"
+      icon: mdi:air-filter
+      entity_category: config
   - platform: restart
     name: "Restart 重開機"
   - platform: factory_reset
     name: "Factory Reset 恢復出廠"
-    internal: True
-  - platform: template
-    name: "Filter-Reset 重設濾網清潔"
-    icon: mdi:air-filter
-    on_press:
-      - lambda: 'id(erv)->reset_filter();'
-  - platform: template
-    name: "Heat-Bath 暖房沐浴"
-    icon: mdi:shower-head
-    on_press:
-      - lambda: 'id(erv)->cmd_mode("heat_bath");'
-  - platform: template
-    name: "Heat-Temp 暖房溫控"
-    icon: mdi:thermostat
-    on_press:
-      - lambda: 'id(erv)->cmd_mode("heat_temp");'
-  - platform: template
-    name: "Cool-Hi 涼風強"
-    icon: mdi:fan-speed-3
-    on_press:
-      - lambda: 'id(erv)->cmd_mode("cool_hi");'
-  - platform: template
-    name: "Cool-Lo 涼風弱"
-    icon: mdi:fan-speed-1
-    on_press:
-      - lambda: 'id(erv)->cmd_mode("cool_lo");'
-  - platform: template
-    name: "Vent-Hi 換氣強"
-    icon: mdi:weather-windy
-    on_press:
-      - lambda: 'id(erv)->cmd_mode("vent_hi");'
-  - platform: template
-    name: "Vent-Lo 換氣弱"
-    icon: mdi:weather-windy-variant
-    on_press:
-      - lambda: 'id(erv)->cmd_mode("vent_lo");'
-  - platform: template
-    name: "Dry-Eco 乾燥節電"
-    icon: mdi:tumble-dryer
-    on_press:
-      - lambda: 'id(erv)->cmd_mode("dry_eco");'
-  - platform: template
-    name: "Dry-Fast 乾燥快速"
-    icon: mdi:tumble-dryer-alert
-    on_press:
-      - lambda: 'id(erv)->cmd_mode("dry_fast");'
-
-select:
-  - platform: template
-    id: sel_filter
-    name: "Filter-Threshold 濾網提醒時數"
-    icon: mdi:air-filter
-    entity_category: config
-    options:
-      - "720"
-      - "1440"
-      - "2160"
-    initial_option: "720"
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_filter_threshold_h(atoi(x.c_str()));'
-  - platform: template
-    name: "Temp 暖房溫控溫度"
-    icon: mdi:thermometer
-    options:
-      - "25"
-      - "26"
-      - "27"
-      - "28"
-      - "29"
-      - "30"
-      - "31"
-      - "32"
-      - "33"
-      - "34"
-      - "35"
-    lambda: 'return id(erv)->get_temp_str();'
-    update_interval: 5s
-    set_action:
-      - lambda: 'id(erv)->set_heat_temp(atoi(x.c_str()));'
-
-switch:
-  - platform: template
-    name: "LightL 左燈"
-    icon: mdi:lightbulb
-    lambda: 'return id(erv)->get_light(23);'
-    turn_on_action:
-      - lambda: 'id(erv)->set_state_bit(23, true);'
-    turn_off_action:
-      - lambda: 'id(erv)->set_state_bit(23, false);'
-  - platform: template
-    name: "LightR 右燈"
-    icon: mdi:lightbulb-outline
-    lambda: 'return id(erv)->get_light(22);'
-    turn_on_action:
-      - lambda: 'id(erv)->set_state_bit(22, true);'
-    turn_off_action:
-      - lambda: 'id(erv)->set_state_bit(22, false);'
-  - platform: template
-    id: sw_buzzer
-    name: "Buzzer 蜂鳴確認"
-    icon: mdi:bell-ring
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-    turn_on_action:
-      - lambda: 'id(erv)->set_buzzer_enabled(true);'
-    turn_off_action:
-      - lambda: 'id(erv)->set_buzzer_enabled(false);'
-  - platform: template
-    id: sw_v24
-    name: "Vent24 24h換氣啟用"
-    icon: mdi:hvac
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: 'id(erv)->set_vent24_enabled(true);'
-    turn_off_action:
-      - lambda: 'id(erv)->set_vent24_enabled(false);'
-
-number:
-  - platform: template
-    id: tmr_hb
-    name: "Timer-HeatBath 暖房沐浴定時"
-    icon: mdi:timer-outline
-    entity_category: config
-    unit_of_measurement: "min"
-    mode: box
-    min_value: 5
-    max_value: 720
-    step: 1
-    initial_value: 60
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_mode_timer(0, (int) x);'
-  - platform: template
-    id: tmr_ht
-    name: "Timer-HeatTemp 暖房溫控定時"
-    icon: mdi:timer-outline
-    entity_category: config
-    unit_of_measurement: "min"
-    mode: box
-    min_value: 5
-    max_value: 720
-    step: 1
-    initial_value: 60
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_mode_timer(1, (int) x);'
-  - platform: template
-    id: tmr_ch
-    name: "Timer-CoolHi 涼風強定時"
-    icon: mdi:timer-outline
-    entity_category: config
-    unit_of_measurement: "min"
-    mode: box
-    min_value: 5
-    max_value: 720
-    step: 1
-    initial_value: 60
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_mode_timer(2, (int) x);'
-  - platform: template
-    id: tmr_cl
-    name: "Timer-CoolLo 涼風弱定時"
-    icon: mdi:timer-outline
-    entity_category: config
-    unit_of_measurement: "min"
-    mode: box
-    min_value: 5
-    max_value: 720
-    step: 1
-    initial_value: 60
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_mode_timer(3, (int) x);'
-  - platform: template
-    id: tmr_vh
-    name: "Timer-VentHi 換氣強定時"
-    icon: mdi:timer-outline
-    entity_category: config
-    unit_of_measurement: "min"
-    mode: box
-    min_value: 5
-    max_value: 720
-    step: 1
-    initial_value: 60
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_mode_timer(4, (int) x);'
-  - platform: template
-    id: tmr_vl
-    name: "Timer-VentLo 換氣弱定時"
-    icon: mdi:timer-outline
-    entity_category: config
-    unit_of_measurement: "min"
-    mode: box
-    min_value: 5
-    max_value: 720
-    step: 1
-    initial_value: 180
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_mode_timer(5, (int) x);'
-  - platform: template
-    id: tmr_de
-    name: "Timer-DryEco 乾燥節電定時"
-    icon: mdi:timer-outline
-    entity_category: config
-    unit_of_measurement: "min"
-    mode: box
-    min_value: 5
-    max_value: 720
-    step: 1
-    initial_value: 180
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_mode_timer(6, (int) x);'
-  - platform: template
-    id: tmr_df
-    name: "Timer-DryFast 乾燥快速定時"
-    icon: mdi:timer-outline
-    entity_category: config
-    unit_of_measurement: "min"
-    mode: box
-    min_value: 5
-    max_value: 720
-    step: 1
-    initial_value: 60
-    optimistic: true
-    restore_value: true
-    set_action:
-      - lambda: 'id(erv)->set_mode_timer(7, (int) x);'
+    internal: true
 
 sensor:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    filter_hours:
+      name: "Filter Hours 濾網時數"
+      icon: mdi:air-filter
+    timer_left:
+      name: "Timer Left 剩餘時間"
+      icon: mdi:timer-sand
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
@@ -339,75 +187,41 @@ sensor:
     name: "ESP32 Temperature"
   - platform: uptime
     name: "Uptime 開機時間"
-    filters:
-      - lambda: return x / 3600;
-    unit_of_measurement: "h"
-    accuracy_decimals: 1
-  - platform: template
-    name: "Filter-Hours 濾網運轉時數"
-    icon: mdi:air-filter
-    unit_of_measurement: "h"
-    accuracy_decimals: 1
-    update_interval: 60s
-    lambda: 'return id(erv)->get_runtime_h();'
-  - platform: template
-    name: "Timer-Left 定時剩餘"
-    icon: mdi:timer-sand
-    unit_of_measurement: "min"
-    accuracy_decimals: 0
-    update_interval: 15s
-    lambda: |-
-      int m = id(erv)->get_timer_left_min();
-      if (m < 0) return NAN;
-      return (float) m;
 
 text_sensor:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    current_mode:
+      name: "Mode State 目前模式"
+      icon: mdi:information-outline
+    host_status:
+      name: "Host 主機回報"
+      icon: mdi:engine-outline
+    raw_state:
+      name: "Raw State 原始狀態"
+      icon: mdi:code-braces
+      entity_category: diagnostic
+      disabled_by_default: true
   - platform: version
     name: "ESPHome Version"
   - platform: wifi_info
     ip_address:
       name: "IP Address"
-  - platform: template
-    id: sw_version
-    name: "SW Version"
-    icon: "mdi:alpha-s-box"
-    entity_category: "diagnostic"
-    update_interval: never
-    lambda: |-
-      const std::string myStringVar = "${SW_VER}";
-      return { myStringVar };
-  - platform: template
-    id: pj_version
-    name: "Project Version"
-    icon: "mdi:alpha-p-box"
-    entity_category: "diagnostic"
-    update_interval: never
-    lambda: |-
-      return { ESPHOME_PROJECT_VERSION };
-  - platform: template
-    name: "MMode 機器實際模式"
-    icon: mdi:engine-outline
-    lambda: 'return id(erv)->get_machine_mode();'
-    update_interval: 3s
-  - platform: template
-    name: "Mode 目前模式"
-    icon: mdi:information-outline
-    lambda: 'return id(erv)->get_mode_name();'
-    update_interval: 2s
 
 binary_sensor:
+  - platform: lifegear_bath_heat
+    lifegear_bath_heat_id: bath_heat
+    filter_due:
+      name: "Filter Due 濾網清潔"
+      icon: mdi:air-filter
+      device_class: problem
+    left_light_state:
+      name: "Left State 左燈狀態"
+      entity_category: diagnostic
+      disabled_by_default: true
+    right_light_state:
+      name: "Right State 右燈狀態"
+      entity_category: diagnostic
+      disabled_by_default: true
   - platform: status
     name: "Status 連線狀態"
-  - platform: template
-    name: "Filter-Due 濾網清潔通知"
-    icon: mdi:air-filter
-    lambda: 'return id(erv)->is_filter_due();'
-  - platform: template
-    name: "LightL-State 左燈狀態"
-    icon: mdi:lightbulb-on-outline
-    lambda: 'return id(erv)->get_light(23);'
-  - platform: template
-    name: "LightR-State 右燈狀態"
-    icon: mdi:lightbulb-on-outline
-    lambda: 'return id(erv)->get_light(22);'
-

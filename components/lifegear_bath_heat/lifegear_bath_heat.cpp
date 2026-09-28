@@ -5,6 +5,8 @@
 #include <esp_rom_sys.h>
 #include <esp_system.h>
 #include <soc/gpio_struct.h>
+#include <hal/gpio_ll.h>   // C3 移植: 跨目標 GPIO 暫存器存取 (always_inline, ISR 安全)
+#include <sdkconfig.h>     // C3 移植: CONFIG_FREERTOS_UNICORE
 #include <cmath>
 
 namespace esphome {
@@ -309,13 +311,13 @@ static bool sig_match(const char *pa, const char *pb, bool prefix) {
   }
 }
 
+// C3 移植: ESP32 原版 GPIO.out_w1ts/out_w1tc/in 是 uint32_t, ESP32-C3 的 gpio_struct.h 改為
+// union (要寫 .val)。改用 hal/gpio_ll.h 的 always_inline 函式, ESP32 與 C3 都編得過且 ISR 安全,
+// 產生的暫存器寫入與原本完全相同 (w1ts/w1tc 單次寫入, in 單次讀取)。
 static inline void IRAM_ATTR fast_write(int pin, int val) {
-  if (val)
-    GPIO.out_w1ts = (1U << pin);
-  else
-    GPIO.out_w1tc = (1U << pin);
+  gpio_ll_set_level(&GPIO, (uint32_t) pin, val ? 1U : 0U);
 }
-static inline int IRAM_ATTR fast_read(int pin) { return (GPIO.in >> pin) & 1; }
+static inline int IRAM_ATTR fast_read(int pin) { return gpio_ll_get_level(&GPIO, (uint32_t) pin); }
 
 // =============================================================================
 //  RMT RX 完成 callback: 機器方向硬體精準擷取 (含 glitch filter)
@@ -1302,7 +1304,7 @@ void LifegearBathHeat::setup() {
   rxcfg.gpio_num = (gpio_num_t) this->rmt_rx_pin_;
   rxcfg.clk_src = RMT_CLK_SRC_DEFAULT;
   rxcfg.resolution_hz = 1000000;   // 1 tick = 1us
-  rxcfg.mem_block_symbols = 96;
+  rxcfg.mem_block_symbols = 96;   // C3: 48 words/channel → 佔 2 個記憶體區塊 (= C3 全部 2 個 RX channel), IDF 5.5 合法
   esp_err_t rerr = rmt_new_rx_channel(&rxcfg, &this->rx_chan_);
   if (rerr != ESP_OK) {
     ESP_LOGE(TAG, "rmt_new_rx_channel 失敗: %d", rerr);
@@ -1328,7 +1330,13 @@ void LifegearBathHeat::setup() {
   }
 
   this->build_tx_(this->override_bits_);
-  xTaskCreatePinnedToCore(worker_task, "lg_erv", 8192, this, 19, nullptr, 1);
+#if CONFIG_FREERTOS_UNICORE
+  // C3 移植: 單核 (ESP32-C3) 綁定 core 1 會觸發 configASSERT(taskVALID_CORE_ID) → 改為不綁核
+  const BaseType_t worker_core = tskNO_AFFINITY;
+#else
+  const BaseType_t worker_core = 1;   // 雙核 ESP32: 維持原本綁定 core 1
+#endif
+  xTaskCreatePinnedToCore(worker_task, "lg_erv", 8192, this, 19, nullptr, worker_core);
   ESP_LOGI(TAG, "reset原因=%d (1=POR 3=SW 4=PANIC 5=INT_WDT 6=TASK_WDT)", (int) esp_reset_reason());
 
   if (!this->standalone_)
