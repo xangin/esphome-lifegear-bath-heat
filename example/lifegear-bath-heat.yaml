@@ -5,7 +5,7 @@
 #  接線 (原廠面板拆除, ESP 直連機器):
 #    ESP GPIO19 ──→ 排線「TX」(原面板送出端 → 機器 RX)  以 1Hz 持續送出狀態幀, ESP 即 master
 #    排線「RX」 ──→ ESP GPIO4  (機器 TX → 原面板接收端)  RMT 硬體擷取, 解機器回報
-#    GND 共地; ESP 請用獨立電源 (USB 5V)。
+#    GND 共地; 排線 3V 可接 ESP32 的 3V 腳供電。
 #
 #  所有 Home Assistant 實體都由元件原生提供, 不需要任何 lambda;
 #  不要的實體直接刪掉那一段即可。開機預設送「關機」狀態。

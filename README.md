@@ -163,7 +163,7 @@ select:
 
 An ESPHome external component that replaces the wired wall panel of a Lifegear bathroom heater/ventilator (tested on BD-125W2) with an ESP32, talking to the heater's main unit directly. Every Home Assistant entity is provided natively by the component — no lambdas needed: mode select (dry, heat, cool, vent, 24h ventilation, off), heat set-point (25–35 °C), both lights, per-mode auto-off timers, filter runtime reminders, and the machine's decoded actual state.
 
-Wire the 4-pin panel cable to an ESP32, ESP32-S3 or ESP32-C3 (esp-idf): cable **TX** → `machine_tx_pin`, cable **RX** → `rmt_rx_pin`, common GND, and power the ESP separately. See [`example/lifegear-bath-heat.yaml`](example/lifegear-bath-heat.yaml) for a complete configuration; for ESP32-C3 just swap the `esp32` block and avoid the USB pins GPIO18/19. Developed against ESPHome 2025.11.5. Display strings are selectable with `display_language: en`.
+Wire the 4-pin panel cable to an ESP32, ESP32-S3 or ESP32-C3 (esp-idf): cable **TX** → `machine_tx_pin`, cable **RX** → `rmt_rx_pin`, common GND. The cable's 3V pin can power a bare ESP32, but not the Guition touch panel board. See [`example/lifegear-bath-heat.yaml`](example/lifegear-bath-heat.yaml) for a complete configuration; for ESP32-C3 just swap the `esp32` block and avoid the USB pins GPIO18/19. Developed against ESPHome 2025.11.5. Display strings are selectable with `display_language: en`.
 
 This is an unofficial, reverse-engineered project and is not affiliated with Lifegear. Mains voltage is involved — switch off the breaker before opening anything.
 
