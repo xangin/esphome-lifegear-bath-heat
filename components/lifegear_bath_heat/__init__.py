@@ -47,6 +47,7 @@ CONF_PANEL_TX_PIN = "panel_tx_pin"
 CONF_MACHINE_RX_PIN = "machine_rx_pin"
 CONF_MACHINE_TX_PIN = "machine_tx_pin"
 CONF_RMT_RX_PIN = "rmt_rx_pin"
+CONF_BOOT_LIGHT_OFF = "boot_light_off"
 CONF_DISPLAY_LANGUAGE = "display_language"
 CONF_LEGACY_LANGUAGE = "language"
 CONF_TIMER_DEFAULTS = "timer_defaults"
@@ -87,6 +88,7 @@ OBJECT_IDS = {
     "right_light": "lightr___",
     "buzzer": "buzzer_____",
     "vent24": "vent24_24h____",
+    "light_invert": "light-invert____",
     "filter_hours": "filter-hours_______",
     "timer_left": "timer-left_____",
     "host_status": "mmode_______",
@@ -172,6 +174,8 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_MACHINE_RX_PIN): _PIN,
             cv.Required(CONF_MACHINE_TX_PIN): _PIN,
             cv.Optional(CONF_RMT_RX_PIN): _PIN,
+            # 取代面板模式: 開機保護解除後補送一幀「燈全關」按鍵幀, 把主機殘留燈態歸零
+            cv.Optional(CONF_BOOT_LIGHT_OFF, default=False): cv.boolean,
             cv.Optional(CONF_DISPLAY_LANGUAGE, default="zh-TW"): cv.one_of(
                 "zh-TW", "en"
             ),
@@ -196,6 +200,7 @@ async def to_code(config):
         cg.add(var.set_panel_tx_pin(config[CONF_PANEL_TX_PIN]))
         cg.add(var.set_machine_rx_pin(config[CONF_MACHINE_RX_PIN]))
     cg.add(var.set_machine_tx_pin(config[CONF_MACHINE_TX_PIN]))
+    cg.add(var.set_boot_light_off(config[CONF_BOOT_LIGHT_OFF]))
     if CONF_RMT_RX_PIN in config:
         cg.add(var.set_rmt_rx_pin(config[CONF_RMT_RX_PIN]))
 

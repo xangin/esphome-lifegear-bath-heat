@@ -120,6 +120,7 @@ select:
 | `rmt_rx_pin` | 建議 | 接收主機訊號的 GPIO，接排線 RX。用 RMT 硬體擷取並解碼主機回報；不設就沒有主機實際狀態 |
 | `display_language` | 否 | 模式與狀態字串語言：`zh-TW`（預設）或 `en` |
 | `timer_defaults` | 否 | 八個模式的預設定時（分鐘，5–720）：`heat_bath`、`heat_temp`、`cool_high`、`cool_low`、`vent_high`、`vent_low`、`dry_eco`、`dry_fast`。宣告了對應的定時實體後，以 HA 上的設定值為準 |
+| `boot_light_off` | 否 | 開機保護解除時先送一幀「燈全關」按鍵幀，把主機殘留的燈態歸零（預設 `false`） |
 
 ## Home Assistant 實體
 
@@ -140,6 +141,7 @@ select:
 | `switch` | `left_light`、`right_light` | 左燈、右燈 |
 | | `buzzer` | 指令是否附帶主機按鍵音 |
 | | `vent24` | 24h 換氣啟用 |
+| | `light_invert` | 照明反相：現場燈的接法使 HA 開關與實燈相反時打開。只翻轉顯示與控制的對照，不動線上的燈位，設定會記憶 |
 | `button` | `off` | 關機；24h 換氣啟用時改為進入 24h 換氣 |
 | | `filter_reset` | 濾網清潔後歸零 |
 | `sensor` | `filter_hours` | 濾網累計運轉時數 |
@@ -153,17 +155,20 @@ select:
 ## 行為說明
 
 - **開機保護**：上電後 15 秒內收到的控制指令不會被丟掉，會暫存最後一道，保護解除後自動送出。開機時預設送「關機」狀態。
-- **24h 換氣**：關機狀態下啟用會立即進入 24h 換氣；其他模式運轉中啟用不會打斷，定時到了改回 24h 換氣。停用時若正處於 24h 換氣會立即關機。開機還原設定時不會送出任何指令。
+- **24h 換氣**：關機狀態下啟用會立即進入 24h 換氣；其他模式運轉中啟用不會打斷，定時到了改回 24h 換氣。停用時若正處於 24h 換氣會立即關機。斷電重開後若設定為啟用、保護期內無人操作，會自動恢復 24h 換氣。
 - **定時**：切進有定時的模式即開始倒數，時間到自動關機（24h 換氣啟用時改回 24h 換氣）。運轉中修改定時會以新值重新起算。
 - **暖房溫控溫度**：協定裡沒有獨立的溫度欄位，每個溫度都是一組完整的模式碼，所以溫度會先存成偏好值，切進暖房溫控時才送到主機；溫控運轉中修改則立即生效。
 - **主機回報**：八個運轉模式在收到主機有效訊號後回報「運轉中」；關機與 24h 換氣需主機明確確認。連續 10 秒沒有收到主機訊號會回到「等待回報」。
 - **濾網時數**：只在實際運轉時累計，節流寫入 NVS 以保護 flash。
+- **照明**：`left_light`／`right_light` 直接設定主機的燈位。燈的實際亮滅極性依現場接線而定，若 HA 顯示與實燈相反，打開 `light_invert` 即可。
+- **主機回報容錯**：部分現場的接線會讓主機訊號裡的短間隔在接收端分辨不出來，這時元件改以「頁型是否閒置、下指令後有無變化」判斷，`host_status` 仍會正確顯示關機／運轉中，只是讀不到主機自報的細部模式。
+- **安裝**：拆原廠面板前請先關閉暖風機迴路的斷路器——主機在通電狀態下失去面板會鎖定，之後對新面板完全不回應，關斷路器重開即可復原。排線的 3V 腳不可接到面板。
 
 ## English
 
 An ESPHome external component that replaces the wired wall panel of a Lifegear bathroom heater/ventilator (tested on BD-125W2) with an ESP32, talking to the heater's main unit directly. Every Home Assistant entity is provided natively by the component — no lambdas needed: mode select (dry, heat, cool, vent, 24h ventilation, off), heat set-point (25–35 °C), both lights, per-mode auto-off timers, filter runtime reminders, and the machine's decoded actual state.
 
-Wire the 4-pin panel cable to an ESP32, ESP32-S3 or ESP32-C3 (esp-idf): cable **TX** → `machine_tx_pin`, cable **RX** → `rmt_rx_pin`, common GND. The cable's 3V pin can power a bare ESP32, but not the Guition touch panel board. See [`example/lifegear-bath-heat.yaml`](example/lifegear-bath-heat.yaml) for a complete configuration; for ESP32-C3 just swap the `esp32` block and avoid the USB pins GPIO18/19. Developed against ESPHome 2025.11.5. Display strings are selectable with `display_language: en`.
+Wire the 4-pin panel cable to an ESP32, ESP32-S3 or ESP32-C3 (esp-idf): cable **TX** → `machine_tx_pin`, cable **RX** → `rmt_rx_pin`, common GND. The cable's 3V pin can power a bare ESP32, but not the Guition touch panel board. See [`example/lifegear-bath-heat.yaml`](example/lifegear-bath-heat.yaml) for a complete configuration; for ESP32-C3 just swap the `esp32` block and avoid the USB pins GPIO18/19. Developed against ESPHome 2025.11.5. Display strings are selectable with `display_language: en`. `light_invert` flips the on/off meaning of both light switches when the lamp wiring is reversed; `boot_light_off: true` resets the lights to off after the boot-protection window. Switch off the heater's breaker before unplugging the original panel, otherwise the main unit locks up until power-cycled; never connect the cable's 3V pin to the panel board.
 
 This is an unofficial, reverse-engineered project and is not affiliated with Lifegear. Mains voltage is involved — switch off the breaker before opening anything.
 

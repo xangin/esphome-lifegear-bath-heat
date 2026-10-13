@@ -11,6 +11,7 @@
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 #include <array>
+#include <vector>
 #include <map>
 #include <string>
 #include <freertos/FreeRTOS.h>
@@ -51,6 +52,7 @@ enum LifegearSwitchKind : uint8_t {
   SWITCH_RIGHT_LIGHT = 1,
   SWITCH_BUZZER = 2,
   SWITCH_VENT24 = 3,
+  SWITCH_LIGHT_INVERT = 4,   // 照明反相: HA/網頁「開」= 實體燈位 0 (現場燈接 NC/雙切時用)
 };
 
 enum LifegearButtonKind : uint8_t {
@@ -138,6 +140,7 @@ class LifegearBathHeat : public Component {
   void set_machine_rx_pin(int p) { this->machine_rx_pin_ = p; }
   void set_machine_tx_pin(int p) { this->machine_tx_pin_ = p; }
   void set_rmt_rx_pin(int p) { this->rmt_rx_pin_ = p; }
+  void set_boot_light_off(bool v) { this->boot_light_off_ = v; }   // 開機保護解除時補送一幀燈全關按鍵幀
 
   void setup() override;
   void loop() override;
@@ -184,6 +187,9 @@ class LifegearBathHeat : public Component {
   void toggle_bits(const std::string &positions);     // 在「當前狀態」上翻轉指定 bit 後送出
   void set_state_bit(int pos, bool val);              // 在「當前狀態」上設定某 bit 並持續送出(照明用)
   bool get_light(int pos);                            // 讀燈態: pos 22=右燈, 23=左燈
+  void set_light(int pos, bool on);                   // 邏輯燈態 (套用照明反相) → set_state_bit
+  void set_light_invert(bool inv);                    // 照明反相 (由 yaml switch restore / HA 推入)
+  bool get_light_invert() const { return this->light_invert_; }
   void toggle_light(int pos);                         // 切換燈態 (override 持續送出)
   void trigger_keypress();                            // 手動送一幀按鍵事件幀 (旗標11+pos14=0=機器按鍵音)
   void set_buzzer_enabled(bool en);                   // 蜂鳴確認: HA 指令是否附帶按鍵音
@@ -209,6 +215,7 @@ class LifegearBathHeat : public Component {
   void set_right_light_switch(LifegearSwitch *entity) { this->right_light_switch_ = entity; }
   void set_buzzer_switch(LifegearSwitch *entity) { this->buzzer_switch_ = entity; }
   void set_vent24_switch(LifegearSwitch *entity) { this->vent24_switch_ = entity; }
+  void set_light_invert_switch(LifegearSwitch *entity) { this->light_invert_switch_ = entity; }
   void set_mode_timer_number(int index, LifegearModeTimerNumber *entity) {
     if (index >= 0 && index < 8) this->mode_timer_numbers_[index] = entity;
   }
@@ -236,6 +243,7 @@ class LifegearBathHeat : public Component {
   // --- 內部 (ISR / task 需存取) ---
   volatile bool override_{false};
   bool standalone_{false};   // true = 取代面板模式(無面板側腳位, 恆為 master 送幀)
+  bool boot_light_off_{false};   // 開機照明歸零 (取代面板模式): 保護解除後送燈全關按鍵幀
   volatile bool accept_cmd_{false};  // 開機保護: 啟動後才接受控制
   std::string boot_pending_bits_;    // 開機保護期間暫存的最後一道控制命令 (主迴圈單執行緒存取)
   volatile int64_t p_last_edge_{0};
@@ -271,6 +279,7 @@ class LifegearBathHeat : public Component {
   volatile int64_t p_done_us_{0};  // 最近一次面板幀完成時刻
   bool rx_ok_{false};
   volatile int rx_arm_err_{-99};
+  volatile uint32_t rmt_pre_merged_{0};   // 合併叢前導 (W _2 X≈6500 _2) 頁數: 現場微縫看不見時的主機頁
   rmt_receive_config_t rx_cfg_{};
 
   void decode_machine_rmt();
@@ -305,13 +314,30 @@ class LifegearBathHeat : public Component {
   uint32_t autovent_confirmed_request_seq_{0};
   uint32_t machine_frame_request_seq_{0};
   uint32_t last_machine_frame_ms_{0};
+  uint32_t last_merged_ms_{0};          // 最近一個合併叢前導頁 (無法投票, 只證明主機有回應)
+  uint32_t merged_request_seq_{0};
+  uint32_t hb_normal_request_seq_{0};   // 最近一次「非自主換氣」心跳頁對應的要求 seq
+  // --- 合併叢現場的頁型簽章 (26.10.13b): 叢只剩總長讀不到模式碼, 改靠「頁型有沒有變」與「閒置簽章」 ---
+  std::string mkey_cur_;             // worker 專用: 最近一頁 key
+  int mkey_cnt_{0};                  // 連續相同次數
+  std::string mkey_stable_;          // 連續 ≥3 頁的穩定 key (mtx_)
+  uint32_t mkey_stable_ms_{0};       // 穩定 key 最近出現時刻 (mtx_)
+  uint32_t mkey_stable_since_ms_{0}; // 目前穩定 key 開始時刻 (mtx_)
+  std::string mkey_req_;             // 下指令當下的穩定 key (mtx_)
+  uint32_t mkey_req_seq_{0};
+  std::string idle_keys_[4];         // 學到的閒置簽章 (mtx_)
+  int idle_key_n_{0};
+  int idle_key_next_{0};
+  void note_merged_key_(const std::string &pk);
   const char *m_cand_{nullptr};  // 長頁投票候選 (連續一致計數)
   int m_cand_cnt_{0};
   int m_unmatched_{0};           // 連續尚未建表的輪播頁數 (僅供診斷，不覆寫有效狀態)
   uint32_t ht_win_{0};           // 溫控熱態統計視窗 (近20頁 burst2 單字符旗標)
+  uint32_t vote_seq_{0};         // 最近一次投票重置對應的 mode_request_seq_ (新指令 → 清空候選)
   volatile uint32_t machine_temp_us_{0};  // 長頁溫度欄位原始 µs (最近一次)
   bool machine_autovent_{false};  // 機器自主低速換氣中 (24h運轉或停機餘轉, 由心跳頁尾段判別)
   bool vent24_enabled_{false};              // 24h 換氣設定 (由 yaml switch restore 推入)
+  bool light_invert_{false};                // 照明反相: 現場燈接 NC/雙切時 HA 開關與實燈相反 (NVS, switch restore)
   bool buzzer_enabled_{false};              // 蜂鳴確認設定 (由 yaml switch restore 推入)
   std::string kp_bits_;                     // 待送的按鍵事件幀內容
   int mode_timer_min_[8]{60, 60, 60, 60, 60, 180, 180, 60};  // 出廠預設 (手冊 p.4)
@@ -343,6 +369,7 @@ class LifegearBathHeat : public Component {
   LifegearSwitch *right_light_switch_{nullptr};
   LifegearSwitch *buzzer_switch_{nullptr};
   LifegearSwitch *vent24_switch_{nullptr};
+  LifegearSwitch *light_invert_switch_{nullptr};
   std::array<LifegearModeTimerNumber *, 8> mode_timer_numbers_{};
   sensor::Sensor *filter_hours_sensor_{nullptr};
   sensor::Sensor *timer_left_sensor_{nullptr};

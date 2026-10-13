@@ -16,6 +16,7 @@ CONF_LEFT_LIGHT = "left_light"
 CONF_RIGHT_LIGHT = "right_light"
 CONF_BUZZER = "buzzer"
 CONF_VENT24 = "vent24"
+CONF_LIGHT_INVERT = "light_invert"
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -40,6 +41,13 @@ CONFIG_SCHEMA = cv.Schema(
             icon="mdi:fan-clock",
             default_restore_mode="RESTORE_DEFAULT_ON",
         ),
+        # 照明反相: 現場燈接在 NC / 雙切電路時 HA 開關與實燈相反, 開啟後翻轉語意 (實體燈位不動)
+        cv.Optional(CONF_LIGHT_INVERT): switch.switch_schema(
+            LifegearSwitch,
+            icon="mdi:swap-horizontal",
+            entity_category="config",
+            default_restore_mode="RESTORE_DEFAULT_OFF",
+        ),
     }
 )
 
@@ -51,12 +59,14 @@ async def to_code(config):
         CONF_RIGHT_LIGHT: LifegearSwitchKind.SWITCH_RIGHT_LIGHT,
         CONF_BUZZER: LifegearSwitchKind.SWITCH_BUZZER,
         CONF_VENT24: LifegearSwitchKind.SWITCH_VENT24,
+        CONF_LIGHT_INVERT: LifegearSwitchKind.SWITCH_LIGHT_INVERT,
     }
     setters = {
         CONF_LEFT_LIGHT: parent.set_left_light_switch,
         CONF_RIGHT_LIGHT: parent.set_right_light_switch,
         CONF_BUZZER: parent.set_buzzer_switch,
         CONF_VENT24: parent.set_vent24_switch,
+        CONF_LIGHT_INVERT: parent.set_light_invert_switch,
     }
     for key, kind in kinds.items():
         if key not in config:

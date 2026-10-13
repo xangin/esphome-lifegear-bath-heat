@@ -67,6 +67,7 @@ lifegear_bath_heat:
   display_language: zh-TW
   machine_tx_pin: 2
   rmt_rx_pin: 1
+  boot_light_off: true   # 開機保護解除後補送一幀「燈全關」按鍵幀, 把主機殘留的燈態歸零
   timer_defaults:
     heat_bath: 30
     heat_temp: 20
@@ -170,6 +171,13 @@ switch:
       name: "Vent24 24h換氣"
       icon: mdi:hours-24
       restore_mode: RESTORE_DEFAULT_ON
+    # 照明反相: 現場燈接法使 HA「開」= 實燈滅時打開; 只翻轉顯示與控制的對照, 不動線上燈位 (NVS 記憶)
+    light_invert:
+      id: bath_heat_light_invert
+      name: "Light Invert 照明反相"
+      icon: mdi:swap-horizontal
+      entity_category: config
+      restore_mode: RESTORE_DEFAULT_OFF
 
 button:
   - platform: lifegear_bath_heat

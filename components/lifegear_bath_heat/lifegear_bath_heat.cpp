@@ -8,6 +8,7 @@
 #include <hal/gpio_ll.h>   // C3 移植: 跨目標 GPIO 暫存器存取 (always_inline, ISR 安全)
 #include <sdkconfig.h>     // C3 移植: CONFIG_FREERTOS_UNICORE
 #include <cmath>
+#include <cstdlib>
 
 namespace esphome {
 namespace lifegear_bath_heat {
@@ -129,12 +130,18 @@ void LifegearModeTimerNumber::dump_config() {
 void LifegearSwitch::write_state(bool state) {
   switch (this->kind_) {
     case SWITCH_LEFT_LIGHT:
-      this->parent_->set_state_bit(23, state);
+      this->parent_->set_light(23, state);
       this->publish_state(this->parent_->get_light(23));
       break;
     case SWITCH_RIGHT_LIGHT:
-      this->parent_->set_state_bit(22, state);
+      this->parent_->set_light(22, state);
       this->publish_state(this->parent_->get_light(22));
+      break;
+    case SWITCH_LIGHT_INVERT:
+      // 只改「邏輯↔實體」對照, 不動線上的燈位 → 實燈不會跳動, HA 顯示下一秒跟著翻正
+      this->parent_->set_light_invert(state);
+      this->publish_state(this->parent_->get_light_invert());
+      global_preferences->sync();
       break;
     case SWITCH_BUZZER:
       this->parent_->set_buzzer_enabled(state);
@@ -143,6 +150,8 @@ void LifegearSwitch::write_state(bool state) {
     case SWITCH_VENT24:
       this->parent_->set_vent24_enabled(state);
       this->publish_state(this->parent_->get_vent24_enabled());
+      // 立即寫入 flash: 預設 1 分鐘才落盤, 切換後馬上斷電會遺失設定
+      global_preferences->sync();
       break;
   }
 }
@@ -541,6 +550,70 @@ void LifegearBathHeat::decode_machine_frame() {
 }
 
 // RMT 硬體擷取的機器方向脈寬 (乾淨, 含 glitch filter)
+// 合併叢頁 key: 跳過前導 tokens; 只有長頁家族 (單脈衝 + ≤10ms 溫度類比間隔開頭) 才產生,
+// 溫度間隔以 _T 取代 (隨機體溫度漂移)。心跳頁 (_31) 與 B 群頁 (_22+) 不產生 key。
+static std::string merged_page_key_(const std::string &key, int skip_tokens) {
+  std::vector<std::string> t;
+  size_t pos = 0;
+  while (pos < key.size()) {
+    size_t sp = key.find(' ', pos);
+    if (sp == std::string::npos) sp = key.size();
+    if (sp > pos) t.push_back(key.substr(pos, sp - pos));
+    pos = sp + 1;
+  }
+  if ((int) t.size() < skip_tokens + 3) return "";
+  t.erase(t.begin(), t.begin() + skip_tokens);
+  const std::string &b1 = t[0];
+  if (!(b1 == "h" || b1 == "N" || b1 == "W")) return "";
+  if (t[1].size() < 2 || t[1][0] != '_') return "";
+  if (atoi(t[1].c_str() + 1) > 20) return "";
+  t[1] = "_T";
+  std::string out;
+  for (auto &x : t) {
+    if (!out.empty()) out += ' ';
+    out += x;
+  }
+  return out;
+}
+
+// 合併叢現場: 本頁 key 的穩定判定 (連續 3 頁) + 閒置簽章學習 (面板要求關機、非自主換氣、同頁型 ≥20 秒)
+void LifegearBathHeat::note_merged_key_(const std::string &pk) {
+  if (pk.empty()) return;
+  const uint32_t now = millis();
+  if (pk == this->mkey_cur_) {
+    if (this->mkey_cnt_ < 1000) this->mkey_cnt_++;
+  } else {
+    this->mkey_cur_ = pk;
+    this->mkey_cnt_ = 1;
+  }
+  if (this->mkey_cnt_ < 3) return;
+  bool announce = false;
+  xSemaphoreTake(this->mtx_, portMAX_DELAY);
+  if (this->mkey_stable_ != pk) {
+    this->mkey_stable_ = pk;
+    this->mkey_stable_since_ms_ = now;
+    announce = true;
+  }
+  this->mkey_stable_ms_ = now;
+  const std::string eff = this->override_ ? this->override_bits_ : this->panel_state_;
+  const bool req_off = mode_index_from_name_(mode_name_from_state_(eff)) == 0;
+  const bool learn = req_off && !this->machine_autovent_ && this->accept_cmd_ &&
+                     (now - this->mkey_stable_since_ms_ >= 20000);
+  bool known = false;
+  for (int i = 0; i < this->idle_key_n_; i++)
+    if (this->idle_keys_[i] == pk) known = true;
+  bool learned = false;
+  if (learn && !known) {
+    this->idle_keys_[this->idle_key_next_] = pk;
+    this->idle_key_next_ = (this->idle_key_next_ + 1) % 4;
+    if (this->idle_key_n_ < 4) this->idle_key_n_++;
+    learned = true;
+  }
+  xSemaphoreGive(this->mtx_);
+  if (announce) ESP_LOGI(TAG, "合併叢頁型: %s", pk.c_str());
+  if (learned) ESP_LOGI(TAG, "學到閒置簽章: %s", pk.c_str());
+}
+
 void LifegearBathHeat::decode_machine_rmt() {
   int n = this->rx_done_num_;
   if (n < 4) return;
@@ -548,6 +621,15 @@ void LifegearBathHeat::decode_machine_rmt() {
   xSemaphoreTake(this->mtx_, portMAX_DELAY);
   const uint32_t request_seq_at_frame = this->mode_request_seq_;
   xSemaphoreGive(this->mtx_);
+  // ★ 26.10.11 新指令後重置投票: 切模式後 1-2 秒內機器仍會送舊狀態長頁, 舊候選計數已 ≥3 時,
+  //   單一殘留頁就會以「新 seq」再確認舊狀態 (例: 關機) → 之後換氣弱這類尚未建表的頁型永遠
+  //   蓋不掉它 → machine_fresh+關機 = 明確矛盾 → 主機狀態卡「等待回報」。新 seq 一律從零數。
+  if (request_seq_at_frame != this->vote_seq_) {
+    this->vote_seq_ = request_seq_at_frame;
+    this->m_cand_ = nullptr;
+    this->m_cand_cnt_ = 0;
+    this->ht_win_ = 0;
+  }
 
   // 未濾波原始 symbol 傾印 (建表用, 每 30 幀一次)
   static uint32_t dumpn = 0;
@@ -570,11 +652,14 @@ void LifegearBathHeat::decode_machine_rmt() {
 
   // 符號化: 依 symbol 實際 level 分類; <150us(微縫/毛刺)跳過
   std::string sig;
+  std::string key;   // 同 sig, 但 X 帶總長 (X13=6500µs): 合併叢頁型簽章用
   int bad = 0;
   int low_cnt = 0;
   uint32_t temp_cand = 0;
   std::string bursts[12];   // 叢 = 微縫相連的脈衝群 (26.08.27 網格實驗: 叢2 = 4脈衝模式碼)
   int nburst = 0;
+  uint32_t high_dur[4] = {0, 0, 0, 0};   // 前 4 個高脈衝實際寬度 (合併叢前導判定用)
+  int nhigh = 0;
   for (int i = 0; i < n; i++) {
     auto &sy = this->rx_done_buf_[i];
     const unsigned lv[2] = {sy.level0, sy.level1};
@@ -588,43 +673,82 @@ void LifegearBathHeat::decode_machine_rmt() {
           temp_cand = du[k];
       }
       if (lv[k]) {
+        if (nhigh < 4) high_dur[nhigh] = du[k];
+        nhigh++;
         char pc;
         if (du[k] < 1300) pc = 'h';
         else if (du[k] <= 1650) pc = 'N';
         else if (du[k] <= 2150) pc = 'W';
         else { pc = 'X'; bad++; }
         sig += pc;
+        if (pc == 'X') {
+          char kb[12];
+          snprintf(kb, sizeof(kb), "X%u", (unsigned) ((du[k] + 250) / 500));
+          key += kb;
+        } else {
+          key += pc;
+        }
         if (nburst < 12) bursts[nburst] += pc;
       } else {
         char b[8];
         snprintf(b, sizeof(b), "_%u", (unsigned) ((du[k] + 250) / 500));
         sig += b;
+        key += b;
         if (nburst < 11 && !bursts[nburst].empty()) nburst++;   // 真 gap = 叢邊界
       }
       sig += ' ';
+      key += ' ';
     }
   }
   if (this->rx_cb_count_ != cb0) return;   // 解碼中被新幀覆寫 → 丟棄
   if (!sig.empty() && sig.back() == ' ') sig.pop_back();
+  if (!key.empty() && key.back() == ' ') key.pop_back();
 
   // 前導驗證 "W _2 N N N W _2" (不符=殘幀/雜訊, 靜默丟棄)
   size_t plen = sizeof(MPRE) - 1;
-  if (sig.size() <= plen || sig.compare(0, plen, MPRE) != 0) return;
+  bool merged_pre = false;
+  if (sig.size() <= plen || sig.compare(0, plen, MPRE) != 0) {
+    // ★ 26.10.13 合併叢前導 (客戶現場實測): 線路上微縫拉不到門檻時, 前導 NNNW 四脈衝會併成
+    //   一段 ≈6500µs 的 X, 整頁變 "W _2 X _2 …"。這仍是主機在回應 → 收下來更新連線時間戳;
+    //   payload 的叢一樣會併成 X 而無法投票 (bad>0 → 下面提早 return), 心跳頁沒有叢照常可辨識。
+    static const char MPRE_MERGED[] = "W _2 X _2 ";
+    const size_t mlen = sizeof(MPRE_MERGED) - 1;
+    if (sig.size() > mlen && sig.compare(0, mlen, MPRE_MERGED) == 0 && high_dur[1] >= 6200 &&
+        high_dur[1] <= 6800) {
+      merged_pre = true;
+      plen = mlen;
+      bad--;   // 前導那個 X 不算未知脈寬
+      this->rmt_pre_merged_++;
+      xSemaphoreTake(this->mtx_, portMAX_DELAY);
+      this->last_merged_ms_ = millis();
+      this->merged_request_seq_ = request_seq_at_frame;
+      xSemaphoreGive(this->mtx_);
+      if ((this->rmt_pre_merged_ % 60) == 1)
+        ESP_LOGI(TAG, "合併叢前導頁 #%u (微縫不可見, 只能判斷主機有回應): %.100s", (unsigned) this->rmt_pre_merged_,
+                 sig.c_str());
+      this->note_merged_key_(merged_page_key_(key, 4));   // 前導 4 個 token: W _2 X13 _2
+    } else {
+      return;
+    }
+  }
   std::string payload = sig.substr(plen);
   ESP_LOGD(TAG, "M頁: %s", payload.c_str());   // 每幀簽章 (建表/關聯分析用)
+
+  // 詳細致動碼可能在暖機、恆溫或冷卻階段暫時消失；合法主機頁仍可證明
+  // 主機在本次模式要求後持續回應。關機/24h 仍由下方明確碼另外確認。
+  // ★ 26.10.11 移到未知脈寬檢查之前: 前導正確的頁就是主機在回應, 含未知脈寬只是不投票,
+  //   不該讓主機狀態掉成「等待回報」。
+  xSemaphoreTake(this->mtx_, portMAX_DELAY);
+  this->last_machine_frame_ms_ = millis();
+  this->machine_frame_request_seq_ = request_seq_at_frame;
+  xSemaphoreGive(this->mtx_);
+
   if (bad) {
     static uint32_t nb = 0;
     if ((nb++ % 20) == 0)
       ESP_LOGW(TAG, "機器頁含未知脈寬: %s", payload.c_str());
     return;
   }
-
-  // 詳細致動碼可能在暖機、恆溫或冷卻階段暫時消失；合法主機頁仍可證明
-  // 主機在本次模式要求後持續回應。關機/24h 仍由下方明確碼另外確認。
-  xSemaphoreTake(this->mtx_, portMAX_DELAY);
-  this->last_machine_frame_ms_ = millis();
-  this->machine_frame_request_seq_ = request_seq_at_frame;
-  xSemaphoreGive(this->mtx_);
 
   // 心跳頁 (prefix 比對, 尾段可能掛額外欄位): 只更新自主換氣旗標, 不動模式
   if (sig_match(payload.c_str(), HB_AUTOVENT, true)) {
@@ -642,6 +766,7 @@ void LifegearBathHeat::decode_machine_rmt() {
     xSemaphoreTake(this->mtx_, portMAX_DELAY);
     const bool changed = this->machine_autovent_;
     this->machine_autovent_ = false;
+    this->hb_normal_request_seq_ = request_seq_at_frame;
     xSemaphoreGive(this->mtx_);
     if (changed) ESP_LOGI(TAG, "機器自主換氣: 結束");
     return;
@@ -793,6 +918,17 @@ std::string LifegearBathHeat::get_localized_machine_status() const {
   const uint32_t autovent_seq = this->autovent_confirmed_request_seq_;
   const uint32_t machine_frame_seq = this->machine_frame_request_seq_;
   const uint32_t machine_frame_ms = this->last_machine_frame_ms_;
+  const uint32_t merged_ms = this->last_merged_ms_;
+  const uint32_t merged_seq = this->merged_request_seq_;
+  const uint32_t hb_normal_seq = this->hb_normal_request_seq_;
+  const std::string mkey_stable = this->mkey_stable_;
+  const uint32_t mkey_stable_ms = this->mkey_stable_ms_;
+  const std::string mkey_req = this->mkey_req_;
+  const uint32_t mkey_req_seq = this->mkey_req_seq_;
+  const bool idle_set_empty = this->idle_key_n_ == 0;
+  bool key_idle = false;
+  for (int i = 0; i < this->idle_key_n_; i++)
+    if (this->idle_keys_[i] == mkey_stable) key_idle = true;
   xSemaphoreGive(this->mtx_);
 
   const uint32_t now = millis();
@@ -812,6 +948,29 @@ std::string LifegearBathHeat::get_localized_machine_status() const {
     const bool explicit_contradiction =
         machine_fresh && (machine_status == "關機" || machine_status == "24h換氣");
     if (!explicit_contradiction) return this->translate_("running");
+  }
+  // ★ 26.10.13 合併叢頁 (微縫不可見的現場): 主機確實在回應本次要求, 但頁內的叢全併成 X 投不了票,
+  //   永遠等不到「關機/24h」的明確確認。這種情況改依面板要求顯示, 否則主機狀態會一直卡等待回報。
+  //   24h 要求若已收到「非自主換氣」心跳頁 (同 seq) 則不樂觀顯示。
+  const bool merged_recent = merged_ms != 0 && merged_seq == request_seq &&
+                             now - merged_ms <= MACHINE_CONFIRM_TIMEOUT_MS;
+  if (merged_recent && machine_link_fresh && !machine_fresh) {
+    // 叢只剩總長, 機器自報模式讀不到; 改用「頁型是否為閒置簽章」與「下指令後頁型有沒有變」判斷:
+    //   關機: 頁型回到閒置簽章, 或下指令後頁型變了 (停機/餘轉中) → 關機; 尚未學到閒置簽章時樂觀顯示。
+    //   模式: 頁型不是閒置 (機器在跑東西) → 運轉中; 頁型仍是閒置 → 等待回報 (指令沒被接受)。
+    //   24h:  心跳頁優先 (上面已處理); 否則下指令後頁型有變且沒收到「非自主換氣」心跳 → 24h。
+    const bool key_fresh = !mkey_stable.empty() && now - mkey_stable_ms <= MACHINE_CONFIRM_TIMEOUT_MS;
+    const bool idle_now = key_fresh && key_idle;
+    const bool reacted = key_fresh && mkey_req_seq == request_seq && mkey_stable != mkey_req;
+    if (requested_mode == 0) {
+      if (idle_now || reacted || idle_set_empty) return this->translate_("off");
+      return this->translate_("waiting_response");
+    }
+    if (requested_mode >= 1 && requested_mode <= 9) {
+      if (key_fresh && !idle_now && (reacted || !idle_set_empty)) return this->translate_("running");
+      return this->translate_("waiting_response");
+    }
+    if (requested_mode == 10 && reacted && hb_normal_seq != request_seq) return this->translate_("vent24");
   }
   return this->translate_("waiting_response");
 }
@@ -939,16 +1098,26 @@ void LifegearBathHeat::tick_tx() {
 }
 
 bool LifegearBathHeat::get_light(int pos) {
+  // 回傳「邏輯」燈態: 實體位 (1=原廠語意的開) XOR 照明反相
   if (this->mtx_ == nullptr) return false;
   xSemaphoreTake(this->mtx_, portMAX_DELAY);
   std::string s = this->override_ ? this->override_bits_ : this->panel_state_;
   xSemaphoreGive(this->mtx_);
-  return s.size() == 30 && s[pos] == '1';
+  if (s.size() != 30) return false;
+  return (s[pos] == '1') != this->light_invert_;
+}
+
+void LifegearBathHeat::set_light(int pos, bool on) { this->set_state_bit(pos, on != this->light_invert_); }
+
+void LifegearBathHeat::set_light_invert(bool inv) {
+  if (this->light_invert_ == inv) return;
+  this->light_invert_ = inv;
+  ESP_LOGI(TAG, "照明反相=%s (實體燈位不變, 只翻轉 HA/網頁的開關語意)", inv ? "開" : "關");
 }
 
 void LifegearBathHeat::toggle_light(int pos) {
   // pos 22=右燈, 23=左燈: 反轉當前生效狀態的該位, 進入 override 持續送出
-  this->set_state_bit(pos, !this->get_light(pos));
+  this->set_light(pos, !this->get_light(pos));
 }
 
 void LifegearBathHeat::set_state_bit(int pos, bool val) {
@@ -1046,6 +1215,8 @@ void LifegearBathHeat::set_override_state(const std::string &data_bits) {
   }
   if (signature_of(pre) != signature_of(bits)) {
     if (++this->mode_request_seq_ == 0) this->mode_request_seq_ = 1;
+    this->mkey_req_ = this->mkey_stable_;   // 合併叢現場: 記下指令前的頁型, 之後比對有沒有變
+    this->mkey_req_seq_ = this->mode_request_seq_;
   }
   this->override_bits_ = bits;
   this->build_tx_(bits);
@@ -1270,6 +1441,11 @@ void LifegearBathHeat::setup() {
     this->set_vent24_enabled(restored.value_or(false));
     this->vent24_switch_->publish_state(this->get_vent24_enabled());
   }
+  if (this->light_invert_switch_ != nullptr) {
+    auto restored = this->light_invert_switch_->get_initial_state_with_restore_mode();
+    this->set_light_invert(restored.value_or(false));
+    this->light_invert_switch_->publish_state(this->get_light_invert());
+  }
 
   this->standalone_ = (this->panel_rx_pin_ < 0);
 
@@ -1347,17 +1523,41 @@ void LifegearBathHeat::setup() {
   this->set_timeout("accept", 15000, [this]() {
     this->accept_cmd_ = true;
     ESP_LOGI(TAG, "開機保護解除,可接受 HA 控制");
-    if (!this->boot_pending_bits_.empty()) {
-      std::string bits;
-      std::swap(bits, this->boot_pending_bits_);
-      ESP_LOGI(TAG, "補發開機保護期間暫存的控制指令");
-      this->set_override_state(bits);
-      // 暫存的暖房溫控是 30°C 基準碼, 補套偏好溫度
-      if (this->heat_temperature_select_ != nullptr && this->is_heat_temp_mode()) {
-        auto index = this->heat_temperature_select_->active_index();
-        if (index.has_value()) this->set_heat_temp(25 + (int) index.value());
+    // ★ 26.10.11 開機照明歸零 (boot_light_off): 取代面板模式下主機可能還留著舊面板設的燈態,
+    //   與我們穩態幀的 pos22/23=0 不一致。先補一幀「燈全關」按鍵事件幀 (機器接受條件
+    //   b0 = pos22|pos23 = 0, 26.08.31 實測), 讓主機燈態與穩態幀同步; 後續補發指令延後
+    //   400ms, 避免搶同一個按鍵幀槽 (worker 最慢 200ms 內送出)。
+    uint32_t delay_ms = 0;
+    if (this->standalone_ && this->boot_light_off_) {
+      xSemaphoreTake(this->mtx_, portMAX_DELAY);
+      std::string bits = this->override_bits_;
+      xSemaphoreGive(this->mtx_);
+      if (bits.size() == 30) {
+        const char off_bit = this->light_invert_ ? '1' : '0';   // 照明反相時「關」= 實體位 1
+        bits[22] = off_bit;
+        bits[23] = off_bit;
+        this->queue_light_keypress_(bits);
+        ESP_LOGI(TAG, "開機照明歸零: 送出燈全關按鍵幀");
+        delay_ms = 400;
       }
     }
+    this->set_timeout("boot_cmd", delay_ms, [this]() {
+      if (!this->boot_pending_bits_.empty()) {
+        std::string bits;
+        std::swap(bits, this->boot_pending_bits_);
+        ESP_LOGI(TAG, "補發開機保護期間暫存的控制指令");
+        this->set_override_state(bits);
+        // 暫存的暖房溫控是 30°C 基準碼, 補套偏好溫度
+        if (this->heat_temperature_select_ != nullptr && this->is_heat_temp_mode()) {
+          auto index = this->heat_temperature_select_->active_index();
+          if (index.has_value()) this->set_heat_temp(25 + (int) index.value());
+        }
+      } else if (this->standalone_ && this->vent24_enabled_ && this->get_mode_name() == "關機") {
+        // 斷電重開: 取代面板模式開機一律先送關機; 24h 換氣記憶為開且期間無人操作 → 恢復 24h 換氣
+        ESP_LOGI(TAG, "開機還原: 24h 換氣設定為開 → 補送 24h 換氣");
+        this->set_override_state(CODE_VENT24);
+      }
+    });
   });
 
 }
@@ -1394,6 +1594,7 @@ void LifegearBathHeat::update_entities_() {
   if (this->right_light_switch_ != nullptr) this->right_light_switch_->publish_state(right_light);
   if (this->buzzer_switch_ != nullptr) this->buzzer_switch_->publish_state(this->get_buzzer_enabled());
   if (this->vent24_switch_ != nullptr) this->vent24_switch_->publish_state(this->get_vent24_enabled());
+  if (this->light_invert_switch_ != nullptr) this->light_invert_switch_->publish_state(this->light_invert_);
 
   if (this->filter_hours_sensor_ != nullptr &&
       (this->filter_hours_dirty_ || now - this->last_filter_hours_check_ms_ >= FILTER_HOURS_CHECK_INTERVAL_MS)) {
