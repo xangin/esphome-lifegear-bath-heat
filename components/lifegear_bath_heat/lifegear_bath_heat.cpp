@@ -1519,8 +1519,8 @@ void LifegearBathHeat::setup() {
     ESP_LOGI(TAG, "中繼啟動: 面板(rx=GPIO%d tx=GPIO%d) 機器(rx=GPIO%d tx=GPIO%d)",
              this->panel_rx_pin_, this->panel_tx_pin_, this->machine_rx_pin_, this->machine_tx_pin_);
 
-  // 開機保護: 15 秒後才接受 HA 控制,避免 select/switch 還原初值時誤觸發 override
-  this->set_timeout("accept", 15000, [this]() {
+  // 開機保護: 5 秒後才接受控制 (26.10.14 由 15 秒縮短), 避免 select/switch 還原初值時誤觸發 override
+  this->set_timeout("accept", 5000, [this]() {
     this->accept_cmd_ = true;
     ESP_LOGI(TAG, "開機保護解除,可接受 HA 控制");
     // ★ 26.10.11 開機照明歸零 (boot_light_off): 取代面板模式下主機可能還留著舊面板設的燈態,
